@@ -84,9 +84,10 @@ button { font: inherit; color: inherit; }
 .shelf { margin-top: 22px; }
 .shelf::before { content: ""; display: block; height: 1px; background: var(--sep); margin: 0 20px 16px; }
 .shelf h2 { margin: 0 20px 12px; font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
-.row { position: relative; display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 20px 6px; scroll-padding-inline: 20px; scroll-snap-type: x proximity; scrollbar-width: none; }
+/* Books keep their own height (a button centres its content when stretched), so every cover top lines up. */
+.row { position: relative; display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 20px 6px; scroll-padding-inline: 20px; scroll-snap-type: x proximity; scrollbar-width: none; }
 .row::-webkit-scrollbar { display: none; }
-.book { flex: none; width: 112px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; scroll-snap-align: start; -webkit-tap-highlight-color: transparent; }
+.book { flex: none; display: block; width: 112px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; scroll-snap-align: start; -webkit-tap-highlight-color: transparent; }
 .book:focus-visible { outline: none; }
 .book:focus-visible .cover-wrap { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 .cover-wrap { display: block; width: 112px; transition: transform 150ms var(--ease-press); }
