@@ -143,6 +143,20 @@ export type ZoomProviderProps = {
   /** While open, hide every item of the group on the page (not just the visible one), so
    *  nothing shows twice in the gaps between cards. Default true. */
   hideGroupWhileOpen?: boolean;
+  /**
+   * While open, keep the group's other items on the page at this opacity instead of
+   * hiding them; only the visible item's own source is hidden. They follow the
+   * visible card: dimming as it opens, and back to full as it closes and lands.
+   * Takes precedence over hideGroupWhileOpen.
+   */
+  groupOpacity?: number;
+  /**
+   * Which cards fly back to their sources when the zoom closes.
+   * - "group" (default): every card in the group flies home to its own source.
+   * - "visible": only the visible card does. The others stay where they are and fade
+   *   out with it (and fade in with it when it opens), for a calmer close.
+   */
+  flyHome?: "group" | "visible";
   /** The close button on each card: true (default), false for none, or render your own.
    *  Your element closes the card if it (or a parent) has data-zoom-close, or calls close(). */
   closeButton?: boolean | ((close: () => void) => ReactNode);
@@ -541,6 +555,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     sessionKey: 0,
     /** Portalled into document.body as a fixed overlay (no container given). */
     fixed: false,
+    /** groupOpacity for this session (null: the group is hidden or shown as hideGroupWhileOpen says). */
+    groupOpacity: null as number | null,
+    /** flyHome is "visible" for this session: the other cards fade with the visible one. */
+    flyVisible: false,
   }).current;
 
   // The shared zoom: the whole pager (card, metadata, neighbours) scales together.
@@ -866,8 +884,35 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (!Number.isFinite(it.sLand)) return clamp(it.cv.o.get(), 0, 1);
     return clamp((it.cv.s.get() - it.sLand) / (1 - it.sLand), 0, 1);
   };
+  /** The visible card's progress, 0 on its source to 1 open (the fade, with reduced motion). */
+  const visibleProgress = () => {
+    if (S.reduced) return clamp(fade.get(), 0, 1);
+    const it = items.current.get(S.ids[S.index]);
+    return it ? clamp(progressOf(it), 0, 1) : 1;
+  };
+  /**
+   * Everything that follows the visible card: the rest of the group on the page (with
+   * groupOpacity) and, when only the visible card flies home, the other cards.
+   */
+  const followVisible = () => {
+    if (S.groupOpacity === null && !S.flyVisible) return;
+    const p = visibleProgress();
+    if (S.groupOpacity !== null) {
+      const o = String(1 - (1 - S.groupOpacity) * p);
+      S.ids.forEach((id, j) => {
+        if (j !== S.index) sources.current.get(id)?.el.style.setProperty("--zoom-group-opacity", o);
+      });
+    }
+    if (S.flyVisible && !S.reduced) {
+      // Squared, so they're mostly gone before the visible card has shrunk much.
+      S.ids.forEach((id, j) => {
+        if (j !== S.index) getItem(id, j).cv.o.set(p * p);
+      });
+    }
+  };
   const updateDerived = () => {
     if (S.phase === "idle") return;
+    followVisible();
     if (S.reduced) {
       const f = clamp(fade.get(), 0, 1);
       zoomOpacity.set(f);
@@ -919,9 +964,30 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
   }, []);
 
-  /** While open: hide the group's items on the page, or just the visible one. */
+  /** With groupOpacity: the visible item's source hidden, the others dimmed (following followVisible). */
+  const markGroup = (hideVisible: boolean) => {
+    S.ids.forEach((id, j) => {
+      const el = sources.current.get(id)?.el;
+      if (!el) return;
+      if (j === S.index) {
+        delete el.dataset.zoomDimmed;
+        if (hideVisible) el.dataset.zoomHidden = "";
+      } else {
+        delete el.dataset.zoomHidden;
+        el.dataset.zoomDimmed = "";
+      }
+    });
+  };
+  const unmarkGroup = (el: HTMLElement) => {
+    delete el.dataset.zoomDimmed;
+    el.style.removeProperty("--zoom-group-opacity");
+  };
+  /** While open: hide the group's items on the page, or just the visible one (dimming the rest). */
   const hideForOpen = () => {
-    if (latest.current.hideGroupWhileOpen === false) {
+    if (S.groupOpacity !== null) {
+      markGroup(true);
+      followVisible();
+    } else if (latest.current.hideGroupWhileOpen === false) {
       S.ids.forEach((id, j) => {
         const el = sources.current.get(id)?.el;
         if (!el) return;
@@ -981,6 +1047,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.reduced = !!reduceRef.current;
     const d = latest.current.dim;
     S.dimMax = typeof d === "function" ? d() : d ?? 0.35;
+    S.groupOpacity = latest.current.groupOpacity ?? null;
+    S.flyVisible = latest.current.flyHome === "visible";
     S.pendingOpen = id;
     S.origin = entry.el;
     S.mode = "zoom";
@@ -1019,6 +1087,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       dimRef.current!.style.opacity = "0";
       root.dataset.open = "";
       emitAll("opening");
+      if (S.groupOpacity !== null) markGroup(false); // the others dim with the fade
       // Reduced motion crossfades, so the page's items disappear once the cards cover them.
       springTo(fade, 1, T.fade, { restDelta: REST.opacity, speed: sp }).then(() => {
         if (gen !== S.gen) return;
@@ -1131,7 +1200,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
       if (prevId) emit(getItem(prevId, previous), "deactivated");
       emit(getItem(S.ids[i], i), "activated");
     }
-    if (S.phase === "open" && latest.current.hideGroupWhileOpen === false) hideForOpen();
+    if (S.phase === "open" && latest.current.hideGroupWhileOpen === false && S.groupOpacity === null) hideForOpen();
+    if ((S.phase === "open" || S.phase === "opening") && S.groupOpacity !== null) hideForOpen();
+    if (S.flyVisible) followVisible();
     setIndexState(i);
     const label = latest.current.getLabel?.(S.ids[i]) ?? S.ids[i];
     setAnnounce(`${label}, ${i + 1} of ${S.ids.length}`);
@@ -1262,6 +1333,23 @@ export function ZoomProvider(props: ZoomProviderProps) {
       const dest = m.dest;
 
       if (target === "sources" && it.landed) return Promise.resolve(); // already home
+
+      if (S.flyVisible && it.j !== index) {
+        // Only the visible card flies. The others stay where they are and fade with it
+        // (followVisible), heading back to their places only if the close turns around.
+        it.offOpacity?.();
+        it.offOpacity = null;
+        if (it.flight) {
+          endFlight(it);
+          if (hero) hero.style.visibility = "";
+        }
+        if (target === "sources") return Promise.resolve();
+        return Promise.all([
+          springTo(cv.x, 0, spec, { velocity: vx, speed: sp }),
+          springTo(cv.y, 0, spec, { velocity: vy, speed: sp }),
+          springTo(cv.s, 1, spec, { velocity: v.vs, restDelta: REST.scale, speed: sp }),
+        ]);
+      }
 
       if (!dest || !src) {
         // Nothing to return to: just fade (and settle back in place if reopening).
@@ -1468,7 +1556,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
     items.current.forEach(resetItem);
     S.ids.forEach((id) => {
       const el = sources.current.get(id)?.el;
-      if (el) delete el.dataset.zoomHidden;
+      if (!el) return;
+      delete el.dataset.zoomHidden;
+      unmarkGroup(el);
     });
     setBackgroundInert(false);
     unlockScroll();
@@ -1618,7 +1708,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
       S.offDim?.();
       S.offDim = null;
       items.current.forEach(resetItem);
-      sources.current.forEach(({ el }) => delete el.dataset.zoomHidden);
+      sources.current.forEach(({ el }) => {
+        delete el.dataset.zoomHidden;
+        unmarkGroup(el);
+      });
       setBackgroundInert(false);
       unlockScroll();
       S.phase = "idle";

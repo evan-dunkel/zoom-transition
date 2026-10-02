@@ -164,3 +164,54 @@ test("Escape and the close button close, landing on the visible item's own cover
   await page.locator(".zoom-card:not([inert]) [data-zoom-close]").click();
   await expect.poll(() => phase(page)).toBe("idle");
 });
+
+test("while open, the rest of the grid stays dimmed and the visible book's cover is hidden", async ({ page }) => {
+  await openFeed(page, 4);
+  const looks = () =>
+    page.locator(".tile .cover-wrap").evaluateAll((els) =>
+      els.map((el) => ({ opacity: Number(getComputedStyle(el).opacity), hidden: getComputedStyle(el).visibility === "hidden" })),
+    );
+  let now = await looks();
+  expect(now[4].hidden).toBe(true);
+  expect(now[3].hidden).toBe(false);
+  expect(now[3].opacity).toBeCloseTo(0.35, 2);
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(600);
+  now = await looks();
+  expect(now[4].hidden).toBe(false);
+  expect(now[4].opacity).toBeCloseTo(0.35, 2);
+  expect(now[5].hidden).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page)).toBe("idle");
+  now = await looks();
+  expect(now.every((l) => !l.hidden && l.opacity === 1)).toBe(true);
+  await expect(page.locator("[data-zoom-dimmed]")).toHaveCount(0);
+});
+
+test("closing flies only the visible card home; the others stay put and fade", async ({ page }) => {
+  await page.goto("/dist/");
+  await page.getByRole("button", { name: "Feed" }).click();
+  await page.getByRole("button", { name: "Slow motion" }).click(); // so there's time to watch the close
+  await page.locator(".tile").nth(4).click();
+  await expect.poll(() => phase(page), { timeout: 5000 }).toBe("open");
+  const neighbour = page.locator(".zoom-card").nth(5);
+  const visible = page.locator(".zoom-card").nth(4);
+  const box = (l: typeof neighbour) => l.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, o: Number(getComputedStyle(el).opacity) };
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  const n1 = await box(neighbour);
+  const v1 = await box(visible);
+  await page.waitForTimeout(400);
+  const n2 = await box(neighbour);
+  const v2 = await box(visible);
+  expect(n2.x).toBeCloseTo(n1.x, 1);
+  expect(n2.y).toBeCloseTo(n1.y, 1);
+  expect(n2.w).toBeCloseTo(n1.w, 1);
+  expect(n2.o).toBeLessThan(n1.o);
+  expect(v2.w).toBeLessThan(v1.w); // the visible one is on its way to its cover
+  await expect.poll(() => phase(page), { timeout: 5000 }).toBe("idle");
+});

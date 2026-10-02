@@ -18,8 +18,9 @@ API guide; this file is the "how it works, why, and what's left" companion.
   pager; closing sends every card back to its own slot.
 - The live demo is the "Book Store" (`demo/`), published as a claude.ai artifact.
   It is a single page that fills the window; `.phone` (no longer drawn as a phone) is the `container`.
-  A Shelves / Feed switch picks one of two prototypes: shelves paging sideways
-  (the original) or a grid of every book opening into a vertical, TikTok-style feed.
+  A Shelves / Feed / Portfolio switch picks one of three prototypes: shelves paging
+  sideways (the original), a grid of every book opening into a vertical, TikTok-style
+  feed, and the feed adapted to a sample design portfolio (projects + writing).
 
 ## 2. Repository layout
 
@@ -34,8 +35,9 @@ src/zoom/            the library (copy into a project)
   TemplateDestination.tsx  destination from <template data-zoom-destination="id">
   zoom.css           required styles + debug styles; theme with --zoom-* vars
   index.ts           public exports
-demo/                Book Store demo: main.tsx (layout switch), BookStore.tsx (shelves),
-                     BookFeed.tsx (vertical feed), BookParts.tsx (covers, 3D book), books.ts, demo.css
+demo/                main.tsx (layout switch), BookStore.tsx (shelves), BookFeed.tsx (vertical
+                     feed), BookParts.tsx (covers, 3D book), books.ts, Portfolio.tsx +
+                     portfolioContent.ts (portfolio prototype), demo.css
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
 tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)
@@ -156,6 +158,16 @@ behind is live and a tap can reopen).
 ### Sources on the page
 - While open, the whole group is hidden on the page (`hideGroupWhileOpen`,
   default true); during close every source stays hidden until its card lands.
+- `groupOpacity` (captured per session in `S.groupOpacity`): the visible item's source
+  gets `data-zoom-hidden`, the others `data-zoom-dimmed` with `--zoom-group-opacity`
+  (CSS in zoom.css). `followVisible()`, called from `updateDerived`, sets the variable
+  to `1 − (1 − g) · p` where p is the visible card's progress (the fade with reduced
+  motion), so the group dims as a card opens and returns as it lands. `markGroup` /
+  `unmarkGroup` apply and clean up; paging re-marks.
+- `flyHome: "visible"` (`S.flyVisible`): in `transitionCards`, cards other than the
+  visible one don't fly. Closing leaves them where the bake put them; reopening
+  springs them back to their slots. `followVisible()` sets their `cv.o` to p², so they
+  fade in on open, fade under a dismiss drag, and fade out on close.
 - `revealSource` only scrolls if the active source is cut off, **never toggles
   scroll-snap** (re-enabling snap caused a ~10 px jump after landing in Safari).
 - Sources ordered by DOM position (`compareDocumentPosition`).
@@ -261,18 +273,27 @@ paging jumps; the group is hidden only once the fade-in completes.
 - Book is a CSS 3D model: `.book3d` (perspective) > page + `.front`
   (preserve-3d, front/back faces). Covers are generated with CSS (cqw units).
 - Feed (`BookFeed.tsx`): all 15 books in one group, a 3-column grid, `orientation:
-  "vertical"`, landing `{1, 0.3}`, geometry 8 px all round on phones (no peek, like
+  "vertical"`, `flyHome: "visible"`, `groupOpacity: 0.35`, landing `{1, 0.3}`, geometry 8 px all round on phones (no peek, like
   TikTok) and a 460 px column with a peek on wider screens. Each card is a dark,
   tinted "reel" (`.reel`, `position: absolute; inset: 0; container-type: size`, so
   it fits the card instead of scrolling): cover sized by `cqw`/`cqh`, set a little
   right of centre because the front cover swings open to the left; title, blurb
   and a stats rail along the bottom. The layout choice persists in localStorage
   (`bookzoom-layout`).
+- Portfolio (`Portfolio.tsx`, content in `portfolioContent.ts`, all invented sample
+  content): 4 projects (group "work", 4:3 tiles) and 5 pieces of writing (group
+  "writing", 68 px square thumbnails opening into 16:9 heroes: the flight crops).
+  Same vertical feed settings, landing `{1, 0}` (hero lands exactly on the tile),
+  history `item`, cards in the page theme, 680 px wide on desktop. Each card is a long
+  read that scrolls; the end names the next piece ("Keep scrolling"), or offers a
+  way back on the last. Imagery is generated with CSS (`Art`, kinds like phones,
+  bars, tiles, shelf, spring). Fonts: Bricolage Grotesque (display), Newsreader
+  (reading).
 
 ## 6. Public API (summary)
 `ZoomProvider` props: `renderDestination`, `container`, `background`, `timing`,
 `timeScale`, `geometry`, `dim`, `scan`, `landing`, `dismiss`, `paging`, `orientation`,
-`hideGroupWhileOpen`, `closeButton`, `history`, `debug`, `getLabel`, `closeLabel`.
+`hideGroupWhileOpen`, `groupOpacity`, `flyHome`, `closeButton`, `history`, `debug`, `getLabel`, `closeLabel`.
 Components: `ZoomSource`, `ZoomHero` (`live`), `TemplateDestination`.
 Types include `ZoomDismiss` and `ZoomEdges` (per-edge `drag` / `wheel` settings).
 Hooks: `useZoom`, `useZoomItem`, `useZoomProgress`, `useZoomEvent`, `useZoomValue`.
@@ -327,7 +348,9 @@ See README for details.
   edge, no blocking window wheel listener, paging/inert/focus, and on the fixed-overlay
   harness: scroll unlock, no sideways shift with scrollbars, cleanup on unmount.
   `feed.spec.ts` covers the vertical pager: layout, arrows, wheel and touch paging,
-  content scrolling before paging, sideways touch/mouse/wheel close, Escape and X.
+  content scrolling before paging, sideways touch/mouse/wheel close, Escape and X,
+  the dimmed group, and only the visible card flying home. `portfolio.spec.ts`: reading
+  then paging at the end, item history, separate feeds, the way back from the last piece.
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
   the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).

@@ -17,8 +17,9 @@ and closing sends every card back to its own source.
   - `flight.ts` — the flying copy of the hero
   - `springs.ts` — SwiftUI-style springs (duration + bounce) mapped to Motion
   - `zoom.css` — required styles; theme with the `--zoom-*` properties
-- `demo/` — the Book Store, rebuilt on the system, in two layouts: shelves that page
-  sideways (`BookStore.tsx`) and a feed that pages up and down (`BookFeed.tsx`)
+- `demo/` — three prototypes: the Book Store as shelves that page sideways
+  (`BookStore.tsx`), the Book Store as a feed that pages up and down (`BookFeed.tsx`),
+  and that feed adapted to a design portfolio of long reads (`Portfolio.tsx`)
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.
@@ -168,6 +169,16 @@ React island, or keep the markup in Astro and use one small island with `scan`
   <ZoomProvider orientation="vertical" geometry={{ top: 8, bottom: 8, side: 8, gap: 8 }} ...>
   ```
 - `hideGroupWhileOpen` — hide the whole group on the page while open (default true).
+- `groupOpacity` — instead of hiding the group, keep its other items on the page at this
+  opacity (e.g. `0.35`); only the visible item's own source is hidden. They follow the
+  visible card, dimming as it opens and returning to full as it lands.
+- `flyHome` — `"group"` (default): closing sends every card back to its own source.
+  `"visible"`: only the visible card flies home; the others stay where they are and fade
+  with it (and fade in with it on open). Pair it with `groupOpacity` for a calm close:
+
+  ```tsx
+  <ZoomProvider orientation="vertical" flyHome="visible" groupOpacity={0.35} ...>
+  ```
 - `closeButton` — `true`, `false`, or `(close) => <YourButton/>`.
 - `history` — off by default. `{ mode: "session" }`: opening adds one history entry,
   swiping only updates the address, Back closes (for sets people flick through,

@@ -103,6 +103,9 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
       <div className="phone feed" ref={phoneRef}>
         <ZoomProvider
           orientation="vertical"
+          // Calm close: only the visible book flies home; the grid stays behind, dimmed.
+          flyHome="visible"
+          groupOpacity={0.35}
           container={() => phoneRef.current}
           background={() => storeRef.current}
           renderDestination={(id) => <BookReel b={BOOKS.get(id)!} heroMode={heroMode} />}

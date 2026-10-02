@@ -67,6 +67,8 @@
 .zoom-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 [data-zoom-hidden] { visibility: hidden !important; }
+/* groupOpacity: the rest of the group, dimmed behind an open card. */
+[data-zoom-dimmed] { opacity: var(--zoom-group-opacity, 1); }
 
 .zoom-card-content {
   position: relative;
