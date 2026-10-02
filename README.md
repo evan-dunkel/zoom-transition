@@ -124,10 +124,25 @@ React island, or keep the markup in Astro and use one small island with `scan`
 - `landing` — how a card sits on its source: `{ widthRatio, topOffset }`. Default is
   exactly the source's width, top-aligned; the Book Store uses `{ 0.86, 0.1 }`.
 - `dismiss` — drag-to-dismiss feel: `{ distance, velocity, minDistance, pivotY, maxShrink, dimFade }`,
-  which edges a drag can close from (`drag`: `"top"`, `"bottom"`, `"both"` (default) or `false`;
-  at the top you pull down, at the bottom you pull up),
-  plus scrolling to dismiss with a mouse wheel or trackpad: `wheel` (`"top"`, `"bottom"`,
-  `"both"` (default) or `false`) and `wheelDistance` (px of scrolling past the edge, default 240).
+  plus which edges each gesture can close the card from:
+  - `drag` — dragging with a finger (or the mouse): pull down from the top, or up from the bottom.
+  - `wheel` — scrolling with a mouse wheel or trackpad past the top or bottom.
+
+  By default only the top edge closes, for both gestures. Pulling up from the bottom
+  is off: it's easy to do by accident at the end of a long read, and on phones it
+  competes with the home indicator. Each edge can be switched on or off on its own;
+  an edge you leave out keeps its default:
+
+  ```tsx
+  dismiss={{
+    wheel: { bottom: true }, // scrolling closes past the top or the bottom
+    drag: { top: false },    // dragging never closes
+  }}
+  ```
+
+  `true`/`false` turn a gesture on or off at both edges; `"top"`, `"bottom"` and `"both"` also work.
+  When an edge is off, that gesture just scrolls the card (with the browser's own bounce).
+  `wheelDistance` sets how far past the edge you scroll to close (px, default 240).
   A swipe that runs into an edge never closes the card; a second swipe made at the
   edge does, and it's recognised right away: on a trackpad by the scroll speed
   dipping and picking up again (momentum only ever slows), on a mouse wheel by a
@@ -136,6 +151,7 @@ React island, or keep the markup in Astro and use one small island with `scan`
 - `debug` — draws tuning aids in each card: striped bands showing the wheel-dismiss
   edge zones (if any of a band is on screen, a swipe toward that edge can close the
   card). They brighten while the content is in the zone and again while a swipe is armed.
+  Only edges with wheel dismissal on get a band.
 - `paging` — swipe between a group's items (default true).
 - `hideGroupWhileOpen` — hide the whole group on the page while open (default true).
 - `closeButton` — `true`, `false`, or `(close) => <YourButton/>`.
@@ -145,7 +161,8 @@ React island, or keep the markup in Astro and use one small island with `scan`
   steps back through them, then closes (for items that are places, like projects).
   `url: (id) => "/writing/" + id` gives each item a real address, so a reload or a
   shared link lands on that item's own static page. Defaults to `#id`.
-- `container` — portal target; defaults to `document.body` as a fixed overlay (scroll is locked while open).
+- `container` — portal target; defaults to `document.body` as a fixed overlay (scroll is locked
+  while open; where scrollbars take up space, their gutter is kept so the page doesn't shift).
 - `background` — element made `inert` while open.
 - Reduced motion is automatic: open and close become fades.
 
@@ -161,6 +178,16 @@ Every transition can be turned around mid-flight, carrying its current speed:
 Internally, the shared zoom is folded into each card's own transform at the
 moment of interruption (position and velocity), so the next spring starts
 from exactly what's on screen.
+
+## Development
+
+```sh
+npm install
+npm run typecheck
+npm run build:demo     # dist/index.html, the Book Store as one self-contained page
+npx playwright install chromium   # once
+npm test               # Playwright: builds the demo and harness, serves them, runs tests/e2e
+```
 
 ## Notes
 

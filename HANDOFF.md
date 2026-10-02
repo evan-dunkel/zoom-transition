@@ -17,7 +17,7 @@ API guide; this file is the "how it works, why, and what's left" companion.
   from the source; the cover flies on its own path; neighbours zoom with the
   pager; closing sends every card back to its own slot.
 - The live demo is the "Book Store" (`demo/`), published as a claude.ai artifact.
-  It is a single page; the phone frame is the `container`.
+  It is a single page that fills the window; `.phone` (no longer drawn as a phone) is the `container`.
 
 ## 2. Repository layout
 
@@ -34,12 +34,14 @@ src/zoom/            the library (copy into a project)
   index.ts           public exports
 demo/                Book Store demo (BookStore.tsx, books.ts, demo.css, main.tsx)
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
-test/scan.*          plain-HTML (Astro-style) harness for scan + templates
+test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
+tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)
 tests/playwright/    ad-hoc regression scripts used during development (see §9)
 build.py             esbuild bundle -> single self-contained HTML (dist/index.html)
+playwright.config.ts builds demo + harness, serves the repo root on :8765
 ```
 
-Build: `npm install`, `npx tsc -p .` (typecheck), `python3 build.py` (demo HTML).
+Build: `npm install`, `npm run typecheck`, `npm run build:demo` (demo HTML), `npm test`.
 
 ## 3. Architecture (layers)
 
@@ -140,6 +142,13 @@ behind is live and a tap can reopen).
   now no long task in headless Chrome.
 - `will-change` only on `.zoom-clone`; zoomer/track rely on transforms
   (avoids blurry text after scaling up).
+- Cards are a memoised `ZoomCard`: paging re-renders only the two cards whose
+  `active` changed, not every destination. Card/hero context values are memoised per
+  card. A new `renderDestination` (parent re-render) still re-renders all cards,
+  which is what makes content changes show.
+- Closures created once (`close`, via `useCallback([])`) must read state from `S` or
+  `latest`, never from render-scoped values. `fixed` used to be read that way, so
+  closing a fixed overlay never unlocked page scrolling; it now lives in `S.fixed`.
 
 ### Sources on the page
 - While open, the whole group is hidden on the page (`hideGroupWhileOpen`,
@@ -147,6 +156,13 @@ behind is live and a tap can reopen).
 - `revealSource` only scrolls if the active source is cut off, **never toggles
   scroll-snap** (re-enabling snap caused a ~10 px jump after landing in Safari).
 - Sources ordered by DOM position (`compareDocumentPosition`).
+
+### Page state while open (fixed overlay)
+- `lockScroll`/`unlockScroll`: `overflow: hidden` on `<html>`, plus
+  `scrollbar-gutter: stable` when scrollbars take up space, so the page (and the
+  sources cards land on) don't shift sideways. Previous inline styles are restored.
+- Unmounting the provider while not idle (route change, Astro page swap) restores
+  scrolling, the background's `inert`, hidden sources, and removes flights.
 
 ### Card DOM
 ```
@@ -170,12 +186,26 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
 ### Gestures (`gestures.ts`)
 - Touch uses touch events (decide axis on first move so native scroll and
   dismiss can coexist); mouse uses pointer events. Motion's drag can't do this.
-- Drag dismiss from **top (pull down) and bottom (pull up)** (`dismiss.drag`),
+- Drag dismiss from **top (pull down) and, when enabled, bottom (pull up)** (`dismiss.drag`),
   only if the drag starts at that edge. Pivot mirrors for bottom pulls.
+- Per-edge options: `dismiss.drag` and `dismiss.wheel` take `ZoomEdges` (`true`/`false`,
+  `"top"`/`"bottom"`/`"both"`, or `{ top?, bottom? }` where a missing edge keeps its
+  default). **Default is top only** (`DEFAULT_EDGES`) for both: bottom pulls are easy
+  to trigger at the end of a long read and compete with the iPhone home indicator.
+  The provider resolves them once per `dismiss` prop (`resolveEdges`, cached by
+  identity) to `{ top, bottom }`; gestures only ever see that form. A disabled edge
+  never arms or pulls; the gesture is left to native scrolling.
   Release hands the spring the **full zoom velocity incl. scale**.
 - Paging: rubber band at ends, projection picks the page (±1), keyboard arrows
   page **also while opening** (flights follow the track), trackpad horizontal
-  swipe pages once per swipe.
+  swipe pages once per swipe (40 px of travel).
+- `swipeTail()` follows a swipe that has already acted (turned a page, closed the
+  card) so its leftover momentum is ignored but a **new swipe acts at once**, even
+  mid-momentum: speed dipping ≤ DIP then rising (fingers back down), or QUIET_MS of
+  quiet. Movement the other way is never part of the tail (so swiping back turns
+  back) but doesn't end it. Used by trackpad paging and by the post-dismiss
+  momentum swallowing. Previously both locks were extended by every event, so they
+  held until macOS stopped sending events, i.e. until the pointer moved.
 - Wheel/trackpad dismiss (`dismiss.wheel`, `wheelDistance` 240, `wheelEdgeSlop` 32):
   a swipe that runs into an edge never closes. A pull is armed only by a
   new swipe at the edge: after QUIET_MS 250 of stillness (and within slop), or
@@ -184,8 +214,12 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   STILL_MS 50. Release = END_MS 350 quiet (macOS pauses ~200 ms between finger
   lift and momentum). Pull is smoothed by a 0.16 s spring; on commit only
   velocity heading home is kept (`towardTargetOnly`); leftover momentum is
-  swallowed for 250 ms. Root data flags `zoneTop/Bottom`, `armedTop/Bottom` drive
-  the debug bands.
+  swallowed (a non-passive window `wheel` listener attached only for that moment)
+  until a new scroll starts (`swipeTail`), the wheel is quiet for QUIET_MS, or 2 s pass. Root data flags `zoneTop/Bottom`, `armedTop/Bottom`
+  drive the debug bands; they're only tracked when `debug` is on.
+- Window listeners are attached only while needed: `pointermove`/`pointerup` during
+  a mouse drag, the momentum-swallowing `wheel` after a wheel dismiss. Nothing on
+  the window costs anything while the zoom is idle.
 
 ### Interruptions supported
 - Opening → closing (Escape, close button, tap outside card).
@@ -206,7 +240,7 @@ paging jumps; the group is hidden only once the fade-in completes.
   0.15; close 1.75× faster (≈0.29 s) / bounce 0.15; landing `{0.86, 0.1}`;
   edge zone 32 px. Tuning panel persists in localStorage key
   `bookzoom-timing-v3` (bump the key when defaults change).
-- "Book in flight" modes: **own timing** (events + `useZoomValue`; only the
+- "Book in flight" modes (default **synced**): **own timing** (events + `useZoomValue`; only the
   active book opens; activated/deactivated open/close; closing finishes in 0.2 s,
   before landing), **synced** (`angle = -105 * clamp(progress) * clamp(focus)`),
   **static** (`ZoomHero live={false}`).
@@ -220,6 +254,7 @@ paging jumps; the group is hidden only once the fade-in completes.
 `timeScale`, `geometry`, `dim`, `scan`, `landing`, `dismiss`, `paging`,
 `hideGroupWhileOpen`, `closeButton`, `history`, `debug`, `getLabel`, `closeLabel`.
 Components: `ZoomSource`, `ZoomHero` (`live`), `TemplateDestination`.
+Types include `ZoomDismiss` and `ZoomEdges` (per-edge `drag` / `wheel` settings).
 Hooks: `useZoom`, `useZoomItem`, `useZoomProgress`, `useZoomEvent`, `useZoomValue`.
 See README for details.
 
@@ -261,13 +296,19 @@ See README for details.
    `history: { mode: "item" | "session", url }`, `client:idle`.
 3. Bundle trimming (LazyMotion), then consider the vanilla adapter.
 4. Optional interruptions: drag-grab mid-flight; swipe while opening.
-5. Move the ad-hoc Playwright scripts into a proper test runner/CI.
+5. Port the rest of the ad-hoc Playwright scripts into `tests/e2e` (interruptions,
+   history, scroll-follow are still only in `tests/playwright`), and run `npm test` in CI.
 6. Option to auto-open from URL hash (`#id`) on load, if wanted.
 
 ## 9. Testing notes
+- `npm test` runs `tests/e2e` (@playwright/test, Chromium): per-edge dismiss options
+  for wheel, touch and mouse drags (each "off" case is paired with the same gesture
+  closing by default, so a passing "stays open" means something), debug bands per
+  edge, no blocking window wheel listener, paging/inert/focus, and on the fixed-overlay
+  harness: scroll unlock, no sideways shift with scrollbars, cleanup on unmount.
+  Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
-  the built demo served at `http://localhost:8765/book-store-zoom.html`
-  (some use `file://` paths from the original sandbox — adjust paths).
+  the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).
   Useful ones: interruptions (`t14`), drag close/focus/reduced (`t10`), row
   stability after close (`t13`), history (`t27`), wheel dismiss (`t28`, `t30`),
   touch bottom dismiss (`t43`), arrows mid-open (`t44`), scroll mid-flight

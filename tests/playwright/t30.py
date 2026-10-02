@@ -1,4 +1,7 @@
-import asyncio
+import asyncio, os
+DEMO = os.environ.get('ZOOM_DEMO_URL', 'http://localhost:8765/dist/')
+SCAN = os.environ.get('ZOOM_SCAN_URL', 'http://localhost:8765/test/scan.html')
+CHROMIUM = os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None
 from playwright.async_api import async_playwright
 ST = """() => ({phase: document.querySelector('.zoom-root').dataset.phase || 'idle', top: Math.round(document.querySelector('.zoom-card:not([inert]) .zoom-card-scroll')?.scrollTop ?? -1)})"""
 async def seq(pg, deltas, gap=16):
@@ -11,10 +14,10 @@ async def fresh(pg):
     await pg.evaluate("document.querySelector('.zoom-card:not([inert]) .zoom-card-scroll').scrollTop = 0"); await pg.wait_for_timeout(400)
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        b = await p.chromium.launch(executable_path=CHROMIUM)
         pg = await b.new_page(viewport={'width':430,'height':900})
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto('http://localhost:8765/book-store-zoom.html'); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800); await pg.check('input[name=scroll-bottom]')  # bottom edges are off by default
         await pg.click('.book >> nth=1'); await pg.wait_for_timeout(1000); await pg.mouse.move(215, 500)
         swipe = [3,8,16,28,40,45,45,40]                     # fingers
         momentum = [38,32,27,22,18,15,12,10,8,6,5,4,3,2,2,1,1]  # decays after lift

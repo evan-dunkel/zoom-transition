@@ -1,4 +1,7 @@
-import asyncio
+import asyncio, os
+DEMO = os.environ.get('ZOOM_DEMO_URL', 'http://localhost:8765/dist/')
+SCAN = os.environ.get('ZOOM_SCAN_URL', 'http://localhost:8765/test/scan.html')
+CHROMIUM = os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None
 from playwright.async_api import async_playwright
 JS_LOG = """() => { window.__log=[]; const r=document.querySelector('.row'); const books=document.querySelectorAll('.row')[0].querySelectorAll('.cover-wrap');
  const f=()=>{ window.__log.push([r.scrollLeft, [...books].map(b=>Math.round(b.getBoundingClientRect().left)).join(','), document.querySelector('.zoom-root').hasAttribute('data-open')]); if(window.__log.length<150) requestAnimationFrame(f)}; f(); }"""
@@ -14,10 +17,10 @@ async def run(pg, label, pages):
     print(label, 'scrollLeft at start', log[0][0], 'after landing', closed[0][0] if closed else None, 'stable after close:', len({(l[0],l[1]) for l in closed})==1)
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        b = await p.chromium.launch(executable_path=CHROMIUM)
         pg = await b.new_page(viewport={'width':430,'height':900})
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto('file:///mnt/user-data/outputs/book-store-zoom.html'); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800)
         bb = await pg.locator('.row').first.bounding_box()
         await pg.mouse.move(bb['x']+200, bb['y']+80)
         for _ in range(30):

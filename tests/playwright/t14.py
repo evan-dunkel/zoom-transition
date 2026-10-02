@@ -1,4 +1,7 @@
-import asyncio, json
+import asyncio, json, os
+DEMO = os.environ.get('ZOOM_DEMO_URL', 'http://localhost:8765/dist/')
+SCAN = os.environ.get('ZOOM_SCAN_URL', 'http://localhost:8765/test/scan.html')
+CHROMIUM = os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None
 from playwright.async_api import async_playwright
 TRACK = """(sel) => { window.__t=[]; const f=()=>{ const c=document.querySelector('.zoom-clone[data-zoom-id="'+sel+'"]') || document.querySelector('.zoom-card[data-zoom-id="'+sel+'"] [data-zoom-hero]');
   const card=document.querySelector('.zoom-card[data-zoom-id="'+sel+'"]');
@@ -17,10 +20,10 @@ async def state(pg):
       active: document.querySelector('.zoom-card:not([inert])')?.dataset.zoomId})""")
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        b = await p.chromium.launch(executable_path=CHROMIUM)
         pg = await b.new_page(viewport={'width':430,'height':900})
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto('file:///mnt/user-data/outputs/book-store-zoom.html'); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800)
         # 1. interrupt opening with Escape
         await pg.click('.book >> nth=1'); await pg.wait_for_timeout(30)
         await pg.evaluate(TRACK, 'night-shift-at-the-observatory')

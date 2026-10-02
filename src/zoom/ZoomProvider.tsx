@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -14,7 +15,7 @@ import { createPortal } from "react-dom";
 import { motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { REST, clamp, defaultTiming, springTo, type ZoomTiming } from "./springs";
 import { createFlight, measureHero, prepareSnapshot, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
-import { attachGestures, type ZoomVelocity } from "./gestures";
+import { attachGestures, type DismissEdges, type GestureDismiss, type ZoomVelocity } from "./gestures";
 
 /* ------------------------------------------------------------------ types */
 
@@ -38,6 +39,13 @@ export type ZoomLanding = {
   topOffset: number;
 };
 
+/**
+ * Which edges of a card a gesture can close it from. true or "both": top and bottom;
+ * false: neither; "top" / "bottom": only that one. As an object, an edge left out
+ * keeps its default (top on, bottom off), so { bottom: true } turns on both.
+ */
+export type ZoomEdges = boolean | "top" | "bottom" | "both" | { top?: boolean; bottom?: boolean };
+
 /** How the drag-to-dismiss gesture feels. */
 export type ZoomDismiss = {
   /** Drag this far down (px) and let go to close. */
@@ -52,14 +60,35 @@ export type ZoomDismiss = {
   maxShrink: number;
   /** How much of the dim fades out as the card shrinks under the finger. */
   dimFade: number;
-  /** Close by dragging (touch or mouse) down from the card's top, up from its bottom, either, or not at all. */
-  drag: "top" | "bottom" | "both" | false;
-  /** Close by scrolling (mouse wheel or trackpad) past the card's top, bottom, either, or not at all. */
-  wheel: "top" | "bottom" | "both" | false;
+  /**
+   * Close by dragging (touch, or a mouse drag) down from the card's top or up from its
+   * bottom. Default: top only. Add the bottom with { bottom: true }.
+   */
+  drag: ZoomEdges;
+  /**
+   * Close by scrolling (mouse wheel or trackpad) past the card's top or bottom.
+   * Default: top only. Add the bottom with { bottom: true }.
+   */
+  wheel: ZoomEdges;
   /** How far (in px of scrolling) past the edge closes the card. */
   wheelDistance: number;
   /** A swipe that starts with the content within this many px of an edge can close the card. */
   wheelEdgeSlop: number;
+};
+
+/** Edges a gesture closes from unless told otherwise: pulling down from the top only.
+ *  Pulling up from the bottom is off: it's easy to do by accident at the end of a
+ *  long read, and on phones it competes with the home indicator. */
+const DEFAULT_EDGES: DismissEdges = { top: true, bottom: false };
+
+/** Normalises every way of writing ZoomEdges to one flag per edge. */
+const resolveEdges = (e: ZoomEdges | undefined): DismissEdges => {
+  if (e === undefined) return DEFAULT_EDGES;
+  if (e === true || e === "both") return { top: true, bottom: true };
+  if (e === false) return { top: false, bottom: false };
+  if (e === "top") return { top: true, bottom: false };
+  if (e === "bottom") return { top: false, bottom: true };
+  return { top: e.top ?? DEFAULT_EDGES.top, bottom: e.bottom ?? DEFAULT_EDGES.bottom };
 };
 
 const defaultLanding: ZoomLanding = { widthRatio: 1, topOffset: 0 };
@@ -70,8 +99,8 @@ const defaultDismiss: ZoomDismiss = {
   pivotY: 0.3,
   maxShrink: 0.4,
   dimFade: 0.65,
-  drag: "both",
-  wheel: "both",
+  drag: DEFAULT_EDGES,
+  wheel: DEFAULT_EDGES,
   wheelDistance: 240,
   wheelEdgeSlop: 32,
 };
@@ -288,18 +317,22 @@ export function useZoomItem() {
 
 const NO_OFFSET = { x: 0, y: 0 };
 
-/** Swaps the flight's snapshot for the live content as soon as it has rendered. */
 /** Debug: the bands of content within wheelEdgeSlop of the top and bottom. If any of a
- *  band is on screen, a swipe toward that edge can close the card. */
-function EdgeZones({ slop }: { slop: number }) {
+ *  band is on screen, a swipe toward that edge can close the card. Only edges that
+ *  wheel dismissal is enabled for are drawn. */
+function EdgeZones({ slop, edges }: { slop: number; edges: DismissEdges }) {
   return (
     <>
-      <div className="zoom-debug-edge zoom-debug-top" style={{ height: slop }} aria-hidden="true">
-        <span>edge zone {slop}px</span>
-      </div>
-      <div className="zoom-debug-edge zoom-debug-bottom" style={{ height: slop }} aria-hidden="true">
-        <span>edge zone {slop}px</span>
-      </div>
+      {edges.top && (
+        <div className="zoom-debug-edge zoom-debug-top" style={{ height: slop }} aria-hidden="true">
+          <span>edge zone {slop}px</span>
+        </div>
+      )}
+      {edges.bottom && (
+        <div className="zoom-debug-edge zoom-debug-bottom" style={{ height: slop }} aria-hidden="true">
+          <span>edge zone {slop}px</span>
+        </div>
+      )}
     </>
   );
 }
@@ -332,10 +365,105 @@ function LiveFlights({
   return <>{[...map.entries()].map(([id, entry]) => render(id, entry))}</>;
 }
 
+/** Swaps the flight's snapshot for the live content as soon as it has rendered. */
 function LiveMount({ onMount, children }: { onMount: () => void; children: ReactNode }) {
   useLayoutEffect(onMount, []);
   return <>{children}</>;
 }
+
+function CloseButton({ option, label, close }: { option: ZoomProviderProps["closeButton"]; label: string; close: () => void }) {
+  if (option === false) return null;
+  if (typeof option === "function") return <>{option(close)}</>;
+  return (
+    <button type="button" className="zoom-close" data-zoom-close aria-label={label}>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+      </svg>
+    </button>
+  );
+}
+
+type ZoomCardProps = {
+  id: string;
+  j: number;
+  active: boolean;
+  layout: Layout;
+  item: Item;
+  phase: MotionValue<Phase>;
+  label: string | undefined;
+  renderDestination: (id: string) => ReactNode;
+  closeButton: ZoomProviderProps["closeButton"];
+  closeLabel: string;
+  close: () => void;
+  /** Debug edge zones, when drawn. */
+  zones: { slop: number; edges: DismissEdges } | null;
+  makeContext: (id: string, j: number, active: boolean) => CardContextValue;
+  setCardEl: (id: string, el: HTMLElement | null) => void;
+};
+/**
+ * One page of the pager. Memoised, so paging (which changes which card is active)
+ * re-renders only the two cards whose active state changed, not every destination
+ * in the group.
+ */
+const ZoomCard = memo(function ZoomCard({
+  id,
+  j,
+  active,
+  layout,
+  item,
+  phase,
+  label,
+  renderDestination,
+  closeButton,
+  closeLabel,
+  close,
+  zones,
+  makeContext,
+  setCardEl,
+}: ZoomCardProps) {
+  const cardContext = useMemo(() => makeContext(id, j, active), [makeContext, id, j, active]);
+  const heroContext = useMemo(
+    () => ({ progress: item.progress, focus: item.focus, phase, inFlight: false, item: item.api }),
+    [item, phase],
+  );
+  const ref = useCallback((el: HTMLElement | null) => setCardEl(id, el), [setCardEl, id]);
+  const v = item.cv;
+  return (
+    <motion.article
+      ref={ref}
+      className="zoom-card"
+      data-zoom-id={id}
+      aria-label={label}
+      inert={!active}
+      style={{
+        left: j * layout.step,
+        top: layout.top,
+        width: layout.cardW,
+        height: layout.cardH,
+        x: v.x,
+        y: v.y,
+        scale: v.s,
+        opacity: v.o,
+      }}
+    >
+      <ZoomCardContext.Provider value={cardContext}>
+        <ZoomHeroContext.Provider value={heroContext}>
+          <div className="zoom-card-scroll">
+            <div className="zoom-card-content">
+              {/* Inside the scrolled content (and sticky), so it rides the
+                  browser's overscroll bounce with the rest of the card. */}
+              <div className="zoom-close-bar">
+                <CloseButton option={closeButton} label={closeLabel} close={close} />
+              </div>
+              {renderDestination(id)}
+              {zones && <EdgeZones slop={zones.slop} edges={zones.edges} />}
+            </div>
+          </div>
+        </ZoomHeroContext.Provider>
+      </ZoomCardContext.Provider>
+    </motion.article>
+  );
+});
 
 export function ZoomProvider(props: ZoomProviderProps) {
   const latest = useRef(props);
@@ -388,7 +516,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
     pendingPush: null as string | null,
     /** True while reacting to Back/Forward, so we don't write history back. */
     fromPop: false,
-    scrollLock: "",
+    /** The page's own overflow and scrollbar-gutter styles while we lock scrolling. */
+    scrollLock: null as { overflow: string; gutter: string } | null,
+    sessionKey: 0,
+    /** Portalled into document.body as a fixed overlay (no container given). */
+    fixed: false,
   }).current;
 
   // The shared zoom: the whole pager (card, metadata, neighbours) scales together.
@@ -402,7 +534,18 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const timing = (): ZoomTiming => ({ ...defaultTiming, ...latest.current.timing });
   const landing = (): ZoomLanding => ({ ...defaultLanding, ...latest.current.landing });
-  const dismiss = (): ZoomDismiss => ({ ...defaultDismiss, ...latest.current.dismiss });
+  // Read on every pointer and wheel event, so it's resolved once per `dismiss` prop
+  // rather than rebuilt each time.
+  const dismissCache = useRef<{ input: Partial<ZoomDismiss> | undefined; value: GestureDismiss } | null>(null);
+  const dismiss = (): GestureDismiss => {
+    const input = latest.current.dismiss;
+    const cached = dismissCache.current;
+    if (cached && cached.input === input) return cached.value;
+    const d = { ...defaultDismiss, ...input };
+    const value = { ...d, drag: resolveEdges(d.drag), wheel: resolveEdges(d.wheel) };
+    dismissCache.current = { input, value };
+    return value;
+  };
   const speed = () => latest.current.timeScale ?? 1;
 
   // Resolved in a passive effect: by then every ref in the tree, including a
@@ -412,6 +555,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
     setHost(c ? c() : document.body);
   }, []);
   const fixed = host === document.body;
+  // Mirrored into S: close() and friends are created once (useCallback with no deps),
+  // so they must not read `fixed` from the render they were created in.
+  S.fixed = fixed;
 
   const getItem = (id: string, j = 0) => {
     let it = items.current.get(id);
@@ -763,6 +909,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
     });
   };
 
+  // As a fixed overlay, the page behind stops scrolling while open. Where scrollbars
+  // take up space (Windows, Linux, some macOS settings), their gutter is kept so the
+  // page doesn't reflow sideways, which would also move the sources cards land on.
+  const lockScroll = () => {
+    if (!S.fixed || S.scrollLock) return;
+    const html = document.documentElement;
+    const scrollbar = window.innerWidth - html.clientWidth;
+    S.scrollLock = { overflow: html.style.overflow, gutter: html.style.scrollbarGutter };
+    if (scrollbar > 0) html.style.scrollbarGutter = "stable";
+    html.style.overflow = "hidden";
+  };
+  const unlockScroll = () => {
+    if (!S.scrollLock) return;
+    const html = document.documentElement;
+    html.style.overflow = S.scrollLock.overflow;
+    html.style.scrollbarGutter = S.scrollLock.gutter;
+    S.scrollLock = null;
+  };
+
   const setBackgroundInert = (inert: boolean) => {
     const bg = latest.current.background?.();
     if (bg) bg.inert = inert;
@@ -795,7 +960,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     updateAllFocus();
     setLayout(S.L);
     setIndexState(S.index);
-    setSession({ ids, key: Date.now() });
+    setSession({ ids, key: ++S.sessionKey });
     pushEntry(id);
   }, []);
 
@@ -811,11 +976,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const T = timing();
     const sp = speed();
 
+    lockScroll();
     setBackgroundInert(true);
-    if (fixed) {
-      S.scrollLock = document.documentElement.style.overflow;
-      document.documentElement.style.overflow = "hidden";
-    }
     root.dataset.phase = S.phase;
 
     if (S.reduced) {
@@ -1279,7 +1441,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       if (el) delete el.dataset.zoomHidden;
     });
     setBackgroundInert(false);
-    if (fixed) document.documentElement.style.overflow = S.scrollLock;
+    unlockScroll();
     S.offDim?.();
     S.offDim = null;
     S.mode = "zoom";
@@ -1305,6 +1467,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       phase: () => S.phase,
       dismiss,
       speed,
+      debug: () => !!latest.current.debug,
       count: () => S.ids.length,
       index: () => S.index,
       layout: () => S.L!,
@@ -1351,6 +1514,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     //   keeping their current speed. Once per frame at most.
     let reaim = 0;
     const onAnyScroll = (e: Event) => {
+      if (S.phase === "idle") return;
       items.current.forEach((it) => {
         if (!it.flight || it.flightScroll0 === null) return;
         it.flightScrollNow = scrollerOf(it.id)?.scrollTop ?? it.flightScrollNow;
@@ -1414,6 +1578,23 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
   }, [host]);
 
+  // Unmounted while open (a route change, an Astro page swap): give the page back
+  // its scrolling, interactivity and hidden sources, and drop any flying copies.
+  useEffect(
+    () => () => {
+      if (S.phase === "idle") return;
+      S.gen += 1; // completions of the running transition are ignored from here on
+      S.offDim?.();
+      S.offDim = null;
+      items.current.forEach(resetItem);
+      sources.current.forEach(({ el }) => delete el.dataset.zoomHidden);
+      setBackgroundInert(false);
+      unlockScroll();
+      S.phase = "idle";
+    },
+    [],
+  );
+
   // Plain-HTML sources (e.g. static Astro markup).
   useEffect(() => {
     const scan = latest.current.scan;
@@ -1442,32 +1623,34 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const api = useMemo(() => ({ open, close: () => close(), register, isOpen: !!session }), [open, close, register, session]);
 
   const closeLabel = props.closeLabel ?? "Close";
-  const cardContext = (id: string, j: number, active: boolean): CardContextValue => ({
-    id,
-    index: j,
-    active,
-    setHero: (el) => {
-      if (el) heroes.current.set(id, el);
-      else heroes.current.delete(id);
-    },
-    setHeroContent: (content) => {
-      if (content) heroContent.current.set(id, content);
-      else heroContent.current.delete(id);
-    },
-    close: () => close(),
-  });
-  const renderClose = () => {
-    const option = props.closeButton ?? true;
-    if (option === false) return null;
-    if (typeof option === "function") return option(() => close());
-    return (
-      <button type="button" className="zoom-close" data-zoom-close aria-label={closeLabel}>
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-        </svg>
-      </button>
-    );
-  };
+  const closeFromUi = useCallback(() => close(), [close]);
+  // Stable, so memoised cards keep their context until their own id/index/active changes.
+  const cardContext = useCallback(
+    (id: string, j: number, active: boolean): CardContextValue => ({
+      id,
+      index: j,
+      active,
+      setHero: (el) => {
+        if (el) heroes.current.set(id, el);
+        else heroes.current.delete(id);
+      },
+      setHeroContent: (content) => {
+        if (content) heroContent.current.set(id, content);
+        else heroContent.current.delete(id);
+      },
+      close: closeFromUi,
+    }),
+    [closeFromUi],
+  );
+  const setCardEl = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) cardEls.current.set(id, el);
+    else cardEls.current.delete(id);
+  }, []);
+  const resolved = dismiss();
+  const zones = useMemo(
+    () => (props.debug ? { slop: resolved.wheelEdgeSlop, edges: resolved.wheel } : null),
+    [props.debug, resolved.wheelEdgeSlop, resolved.wheel],
+  );
   const overlay =
     host &&
     createPortal(
@@ -1476,49 +1659,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
         <motion.div ref={zoomerRef} className="zoom-zoomer" style={{ x: zx, y: zy, scale: zs, opacity: zoomOpacity }}>
           {session && layout && (
             <motion.div key={session.key} className="zoom-track" style={{ x: trackX }}>
-              {session.ids.map((id, j) => {
-                const v = getItem(id, j).cv;
-                const active = j === index;
-                return (
-                  <motion.article
-                    key={id}
-                    ref={(el: HTMLElement | null) => {
-                      if (el) cardEls.current.set(id, el);
-                      else cardEls.current.delete(id);
-                    }}
-                    className="zoom-card"
-                    data-zoom-id={id}
-                    aria-label={props.getLabel?.(id)}
-                    inert={!active}
-                    style={{
-                      left: j * layout.step,
-                      top: layout.top,
-                      width: layout.cardW,
-                      height: layout.cardH,
-                      x: v.x,
-                      y: v.y,
-                      scale: v.s,
-                      opacity: v.o,
-                    }}
-                  >
-                    <ZoomCardContext.Provider value={cardContext(id, j, active)}>
-                      <ZoomHeroContext.Provider
-                        value={{ progress: getItem(id, j).progress, focus: getItem(id, j).focus, phase: phaseMV, inFlight: false, item: getItem(id, j).api }}
-                      >
-                        <div className="zoom-card-scroll">
-                          <div className="zoom-card-content">
-                            {/* Inside the scrolled content (and sticky), so it rides the
-                                browser's overscroll bounce with the rest of the card. */}
-                            <div className="zoom-close-bar">{renderClose()}</div>
-                            {props.renderDestination(id)}
-                            {props.debug && <EdgeZones slop={dismiss().wheelEdgeSlop} />}
-                          </div>
-                        </div>
-                      </ZoomHeroContext.Provider>
-                    </ZoomCardContext.Provider>
-                  </motion.article>
-                );
-              })}
+              {session.ids.map((id, j) => (
+                <ZoomCard
+                  key={id}
+                  id={id}
+                  j={j}
+                  active={j === index}
+                  layout={layout}
+                  item={getItem(id, j)}
+                  phase={phaseMV}
+                  label={props.getLabel?.(id)}
+                  renderDestination={props.renderDestination}
+                  closeButton={props.closeButton ?? true}
+                  closeLabel={closeLabel}
+                  close={closeFromUi}
+                  zones={zones}
+                  makeContext={cardContext}
+                  setCardEl={setCardEl}
+                />
+              ))}
             </motion.div>
           )}
         </motion.div>

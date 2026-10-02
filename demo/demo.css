@@ -6,8 +6,6 @@
   --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --serif: ui-serif, "New York", "Fraunces", Georgia, "Times New Roman", serif;
   --page: #d9dae0;
-  --bezel: #1d1d1f;
-  --bezel-edge: #3a3a3d;
   --bg: #ffffff;
   --card: #ffffff;
   --text: #1c1c1e;
@@ -23,8 +21,6 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --page: #2a2a2e;
-    --bezel: #0a0a0b;
-    --bezel-edge: #48484c;
     --bg: #000000;
     --card: #1c1c1e;
     --text: #f5f5f7;
@@ -39,8 +35,6 @@
 }
 :root[data-theme="dark"] {
   --page: #2a2a2e;
-  --bezel: #0a0a0b;
-  --bezel-edge: #48484c;
   --bg: #000000;
   --card: #1c1c1e;
   --text: #f5f5f7;
@@ -59,25 +53,19 @@ body { height: 100%; margin: 0; background: var(--page); color: var(--text); fon
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.stage { height: 100%; display: flex; align-items: center; justify-content: center; padding: 34px 16px; }
+/* The store fills the window; .phone is the zoom's container. */
+.stage { height: 100%; }
 .phone {
-  --top-inset: 58px;
-  --card-top: 52px;
-  --card-bottom: 14px;
+  --top-inset: 24px;
   position: relative;
-  flex: none;
-  width: 390px;
+  width: 100%;
   height: 100%;
-  max-height: 844px;
-  border-radius: 48px;
   overflow: hidden;
   background: var(--bg);
-  box-shadow: 0 0 0 9px var(--bezel), 0 0 0 10px var(--bezel-edge), 0 40px 80px -24px rgba(0, 0, 0, 0.45);
   isolation: isolate;
 }
 @media (max-width: 540px) {
-  .stage { padding: 0; }
-  .phone { width: 100%; max-height: none; border-radius: 0; box-shadow: none; --top-inset: 16px; --card-top: 8px; --card-bottom: 8px; }
+  .phone { --top-inset: 16px; }
 }
 
 /* Store */
@@ -96,9 +84,10 @@ button { font: inherit; color: inherit; }
 .shelf { margin-top: 22px; }
 .shelf::before { content: ""; display: block; height: 1px; background: var(--sep); margin: 0 20px 16px; }
 .shelf h2 { margin: 0 20px 12px; font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
-.row { position: relative; display: flex; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 20px 6px; scroll-padding-inline: 20px; scroll-snap-type: x proximity; scrollbar-width: none; }
+/* Books keep their own height (a button centres its content when stretched), so every cover top lines up. */
+.row { position: relative; display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 20px 6px; scroll-padding-inline: 20px; scroll-snap-type: x proximity; scrollbar-width: none; }
 .row::-webkit-scrollbar { display: none; }
-.book { flex: none; width: 112px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; scroll-snap-align: start; -webkit-tap-highlight-color: transparent; }
+.book { flex: none; display: block; width: 112px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; scroll-snap-align: start; -webkit-tap-highlight-color: transparent; }
 .book:focus-visible { outline: none; }
 .book:focus-visible .cover-wrap { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 .cover-wrap { display: block; width: 112px; transition: transform 150ms var(--ease-press); }
@@ -192,3 +181,5 @@ button { font: inherit; color: inherit; }
 .tune select { height: 32px; padding: 0 8px; border: 1px solid var(--sep); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
 .tune .check { gap: 8px; }
 .tune .check input { width: auto; height: auto; accent-color: var(--accent); }
+.tune .edges { display: inline-flex; align-items: center; gap: 6px 12px; margin: 0; padding: 0; border: 0; }
+.tune .edges legend { float: left; margin-right: 4px; padding: 0; color: var(--text2); }

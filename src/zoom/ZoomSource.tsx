@@ -23,6 +23,6 @@ export function ZoomSource({ id, group = "default", as = "div", children, ...res
   useLayoutEffect(() => {
     if (!register || !ref.current) return;
     return register({ id, group, el: ref.current });
-  }, [register, id, group]);
+  }, [register, id, group, as]); // a new `as` is a new element
   return createElement(as, { ...rest, ref, "data-zoom-react-source": id }, children);
 }
