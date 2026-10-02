@@ -1514,7 +1514,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
       hidden = r.left < left - 0.5 || r.top < top - 0.5 || r.right > left + p.clientWidth + 0.5 || r.bottom > top + p.clientHeight + 0.5;
     }
     if (!hidden) return false;
-    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" as ScrollBehavior });
+    try {
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" as ScrollBehavior });
+    } catch {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" }); // older Safari has no "instant"
+    }
     return true;
   };
 
@@ -1800,7 +1804,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const overlay =
     host &&
     createPortal(
-      <div ref={rootRef} className={fixed ? "zoom-root zoom-fixed" : "zoom-root"} role="dialog" aria-modal="true">
+      <div
+        ref={rootRef}
+        className={["zoom-root", fixed && "zoom-fixed", layout?.vertical && "zoom-vertical"].filter(Boolean).join(" ")}
+        role="dialog"
+        aria-modal="true"
+      >
         <motion.div ref={dimRef} className="zoom-dim" style={{ opacity: dimOpacity }} />
         <motion.div ref={zoomerRef} className="zoom-zoomer" style={{ x: zx, y: zy, scale: zs, opacity: zoomOpacity }}>
           {session && layout && (

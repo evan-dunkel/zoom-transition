@@ -227,7 +227,16 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   native scrolling there did nothing until the new card slid under the pointer, which
   felt like waiting for the page turn (worst paging up with the pointer low). Touch:
   a vertical drag that lands off the card gets axis "scroll" and drives `scrollTop`,
-  then glides with UIScrollView deceleration (`glideScroll`). Sideways swipes pull the card (same `pull` spring and
+  then glides with UIScrollView deceleration (`glideScroll`). While a page turn is still
+  settling (`turning()`), every vertical scroll goes to the new card by hand, wherever the
+  pointer is. Manual scrolling uses plain `scrollTop` (older Safari throws on behavior
+  "instant"; restarting a smooth scroll per event barely moves).
+  Edges: cards in a vertical pager have `overscroll-behavior-y: none` (root class
+  `zoom-vertical`), and paging arms with `armEdges(..., eager)`: a new swipe is any clear
+  rise in speed at the edge (step ≥ min·1.5 + 4), not dip-to-near-zero-then-rise.
+  Previously a swipe made while the last one's momentum (or the browser's bounce) was
+  still running at the edge never counted, so the page was hard to turn. Dismiss arming
+  (horizontal pager) is unchanged. Sideways swipes pull the card (same `pull` spring and
   `pullBy`/`commitWheelDismiss`, mapped to x). Edge settings collapse to on/off
   (`sidewaysOn`). Debug edge zones aren't drawn.
 - `swipeTail()` follows a swipe that has already acted (turned a page, closed the

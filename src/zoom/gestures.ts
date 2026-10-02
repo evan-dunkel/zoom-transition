@@ -101,6 +101,17 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     stopGlide();
     Object.assign(G, { on: true, type, x0: x, y0: y, axis: null, samples: [{ t, x, y }], startIndex: c.index(), pulled: 0, target });
   };
+  /** A page turn is still settling: the track isn't at the visible card yet. */
+  const turning = () => Math.abs(c.track.get() - c.trackAt(c.index())) > 0.5;
+  /**
+   * Scroll the visible card's content by hand, one wheel event's worth. Plain scrollTop:
+   * restarting a smooth scroll on every event barely moves it, and older Safari throws
+   * on behavior "instant".
+   */
+  const scrollCardBy = (sc: HTMLElement, dy: number) => {
+    stopGlide();
+    sc.scrollTop += dy;
+  };
   /** True when an event landed somewhere other than the visible card (a neighbour, a gap, the backdrop). */
   const offCard = (target: EventTarget | null) => {
     const card = c.activeCard();
@@ -192,7 +203,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
         if (sideways && sidewaysOn(drag)) startDismiss(dx > 0 ? 1 : -1);
         // At the top pulling down, or at the bottom pushing up: the previous or next page.
         else if (!sideways && ((dy > 0 && atTop) || (dy < 0 && atBottom))) startPaging();
-        else if (!sideways && G.type === "touch" && scroller && offCard(G.target)) {
+        else if (!sideways && G.type === "touch" && scroller && (turning() || offCard(G.target))) {
           G.axis = "scroll";
           G.scroll0 = scroller.scrollTop;
         } else {
@@ -523,8 +534,14 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
    * Arms the top or bottom edge when this vertical wheel event is a new swipe made
    * with the content resting at (or within the slop of) that edge, as described
    * above. Returns where the content is.
+   *
+   * eager (paging): a new swipe is recognised as soon as the speed picks up at the
+   * edge, without first dropping to almost nothing. Momentum only ever slows, so any
+   * clear rise is fingers pushing again. Waiting for a near stop meant a swipe made
+   * while the last one's momentum was still running into the edge (or while the
+   * content bounced there) never counted, and the page wouldn't turn.
    */
-  const armEdges = (dy: number, scroller: HTMLElement, edges: DismissEdges, slop: number) => {
+  const armEdges = (dy: number, scroller: HTMLElement, edges: DismissEdges, slop: number, eager = false) => {
     const now = performance.now();
     const fromTopEdge = scroller.scrollTop;
     const fromBottomEdge = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
@@ -542,7 +559,9 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       W.minAtEdge = Infinity;
     } else if (atEdgeThisWay && still && (dy < 0 ? edges.top && !W.armedTop : edges.bottom && !W.armedBottom)) {
       // A quick second swipe, already at the edge.
-      const fingersBack = W.minAtEdge <= DIP && step >= W.minAtEdge * 1.8 + 3;
+      const fingersBack = eager
+        ? W.minAtEdge !== Infinity && step >= W.minAtEdge * 1.5 + 4
+        : W.minAtEdge <= DIP && step >= W.minAtEdge * 1.8 + 3;
       const wheelAgain = gap >= MOUSE_GAP_MS && step >= 40 && step === W.prevAbs;
       if (fingersBack || wheelAgain) {
         if (dy < 0) W.armedTop = true;
@@ -638,7 +657,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       pageClock(now);
       return;
     }
-    const { atTop, atBottom } = armEdges(dy, scroller, { top: true, bottom: true }, c.dismiss().wheelEdgeSlop);
+    const { atTop, atBottom } = armEdges(dy, scroller, { top: true, bottom: true }, c.dismiss().wheelEdgeSlop, true);
     const atEdgeThisWay = dy < 0 ? atTop : atBottom;
     // A new swipe straight after a page turn: at the edge, it turns the next one.
     if (afterPage && atEdgeThisWay) {
@@ -647,10 +666,13 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     }
     const armed = c.paging().atEdge === "continue" || (dy < 0 ? W.armedTop : W.armedBottom);
     if (!atEdgeThisWay || !armed) {
-      // Scrolls the card's content: natively when over it, by hand from anywhere else.
-      if (offCard(e.target)) {
+      // Scrolls the card's content. Natively when the pointer is over it; by hand while
+      // a page turn is still settling (hit-testing a card that's moving is unreliable,
+      // and the card being left is inert, so native scrolling would wait for the new
+      // card to reach the pointer) and from anywhere off the card.
+      if (turning() || offCard(e.target)) {
         e.preventDefault();
-        scroller.scrollBy({ top: dy, behavior: Math.abs(dy) >= 60 ? "smooth" : "instant" });
+        scrollCardBy(scroller, dy);
       }
       return;
     }

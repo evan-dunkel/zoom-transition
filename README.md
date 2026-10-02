@@ -168,7 +168,8 @@ React island, or keep the markup in Astro and use one small island with `scan`
     paging takes over at its top and bottom, and as with closing, a swipe that runs
     into the edge doesn't turn the page — a new swipe there does. `dismiss.drag` and
     `dismiss.wheel` set to `false` turn the sideways close off; other edge settings
-    don't apply. Tapping above or below the card pages, beside it closes.
+    don't apply. Tapping above or below the card pages, beside it closes. Cards don't
+    bounce at their ends (a bounce made the next swipe hard to recognise).
 
   ```tsx
   <ZoomProvider orientation="vertical" geometry={{ top: 8, bottom: 8, side: 8, gap: 8 }} ...>

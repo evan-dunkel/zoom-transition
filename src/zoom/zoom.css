@@ -42,6 +42,10 @@
 }
 .zoom-card-scroll::-webkit-scrollbar { display: none; }
 .zoom-dragging .zoom-card-scroll { overflow: hidden; }
+/* Vertical pager: no overscroll bounce inside a card. Reaching the end stops dead and
+   the next swipe turns the page; a bounce kept the content moving at the edge, so a
+   new swipe there was hard to tell from the old one and the page wouldn't turn. */
+.zoom-vertical .zoom-card-scroll { overscroll-behavior-y: none; }
 
 .zoom-close {
   position: absolute;
