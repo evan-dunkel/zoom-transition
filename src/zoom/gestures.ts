@@ -1,7 +1,7 @@
 import { motionValue, type MotionValue } from "motion/react";
 import { REST, clamp, project, rubber, springTo } from "./springs";
 
-export type GestureLayout = { W: number; H: number; side: number; step: number; top: number; cardH: number };
+export type GestureLayout = { W: number; H: number; side: number; step: number; top: number; cardH: number; vertical: boolean };
 
 export type ZoomVelocity = { vx: number; vy: number; vs: number };
 
@@ -34,11 +34,11 @@ export type GestureController = {
   speed(): number;
   /** Whether the debug edge zones are drawn (their state is only tracked then). */
   debug(): boolean;
-  trackX: MotionValue<number>;
+  track: MotionValue<number>;
   zx: MotionValue<number>;
   zy: MotionValue<number>;
   zs: MotionValue<number>;
-  targetX(i: number): number;
+  trackAt(i: number): number;
   setIndex(i: number): void;
   page(direction: number): void;
   settlePage(i: number, velocity: number): void;
@@ -52,11 +52,16 @@ export type GestureController = {
 /**
  * Touch and mouse handling for the open pager. Touch uses touch events so a
  * vertical drag can either scroll the card natively or, at the top of the card,
- * become a dismiss — the decision is made on the first move, before scrolling starts.
- * Motion's own drag/pan gestures can't make that hand-off with native scroll.
+ * become a dismiss (or, in a vertical pager, turn the page) — the decision is made
+ * on the first move, before scrolling starts. Motion's own drag/pan gestures can't
+ * make that hand-off with native scroll.
+ *
+ * Horizontal pager: sideways drags page, vertical drags at an edge dismiss.
+ * Vertical pager: vertical drags at an edge page, sideways drags dismiss.
  */
 export function attachGestures(root: HTMLElement, c: GestureController) {
-  type Axis = "x" | "y" | "none" | null;
+  /** "page": moving the track. "dismiss": pulling the card away. "none": left to native scrolling. */
+  type Axis = "page" | "dismiss" | "none" | null;
   const G = {
     on: false,
     type: "touch" as "touch" | "mouse",
@@ -68,9 +73,13 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     startIndex: 0,
     tx0: 0,
     ty0: 0,
-    /** Dismiss drag direction: 1 = pulled down from the top, -1 = pulled up from the bottom. */
+    /**
+     * Dismiss drag direction: 1 = pulled down from the top (or, in a vertical pager,
+     * to the right), -1 = pulled up from the bottom (or to the left).
+     */
     dir: 1 as 1 | -1,
-    ty: 0,
+    /** How far the card has been pulled in the dismiss direction. */
+    pulled: 0,
   };
   let suppressClickUntil = 0;
 
@@ -78,7 +87,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     // A touch can begin while the card is still opening; it takes effect once open.
     const phase = c.phase();
     if (phase !== "open" && phase !== "opening") return;
-    Object.assign(G, { on: true, type, x0: x, y0: y, axis: null, samples: [{ t, x, y }], startIndex: c.index(), ty: 0 });
+    Object.assign(G, { on: true, type, x0: x, y0: y, axis: null, samples: [{ t, x, y }], startIndex: c.index(), pulled: 0 });
   };
   const sample = (t: number, x: number, y: number) => {
     G.samples.push({ t, x, y });
@@ -95,12 +104,17 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   };
   // The card shrinks around a point a third of the way down when pulled down from
   // the top, and the mirror point (a third of the way up) when pulled up from the
-  // bottom, so the part under your finger stays under it.
+  // bottom, so the part under your finger stays under it. Pulled sideways (vertical
+  // pager), it shrinks around the same point a third of the way down.
   const pivot = (dir: number = 1) => {
     const L = c.layout();
     const p = c.dismiss().pivotY;
-    return { cx: L.W / 2, cy: L.top + L.cardH * (dir < 0 ? 1 - p : p) };
+    return { cx: L.W / 2, cy: L.top + L.cardH * (dir < 0 && !L.vertical ? 1 - p : p) };
   };
+  /** How far a pull goes before the card has shrunk all it will. */
+  const pullSpan = (L: GestureLayout) => (L.vertical ? L.W : L.H) * 0.9;
+  /** Dismiss gestures are on: a vertical pager closes sideways, from either side, if either edge is on. */
+  const sidewaysOn = (edges: DismissEdges) => edges.top || edges.bottom;
 
   /** Returns true when the gesture is ours, so touch can preventDefault. */
   const move = (x: number, y: number, t: number) => {
@@ -111,19 +125,20 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     if (!G.axis) {
       if (c.phase() !== "open") return false;
       if (Math.hypot(dx, dy) < (G.type === "touch" ? 3 : 5)) return false;
+      const L0 = c.layout();
       const scroller = c.activeScroller();
       const drag = c.dismiss().drag;
-      if (Math.abs(dx) > Math.abs(dy) * 0.9) {
-        G.axis = "x";
-        G.startTrack = c.trackX.get();
-        c.trackX.jump(G.startTrack); // grab a settling page where it is
-      } else if (
-        (dy > 0 && drag.top && (!scroller || scroller.scrollTop <= 0)) ||
-        (dy < 0 && drag.bottom && (!scroller || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1))
-      ) {
-        // At the top pulling down, or at the bottom pulling up: a dismiss drag.
-        G.axis = "y";
-        G.dir = dy > 0 ? 1 : -1;
+      const sideways = Math.abs(dx) > Math.abs(dy) * 0.9;
+      const atTop = !scroller || scroller.scrollTop <= 0;
+      const atBottom = !scroller || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+      const startPaging = () => {
+        G.axis = "page";
+        G.startTrack = c.track.get();
+        c.track.jump(G.startTrack); // grab a settling page where it is
+      };
+      const startDismiss = (dir: 1 | -1) => {
+        G.axis = "dismiss";
+        G.dir = dir;
         const { cx, cy } = pivot(G.dir);
         const s = c.zs.get();
         G.tx0 = c.zx.get() - cx * (1 - s);
@@ -131,7 +146,19 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
         c.zx.jump(c.zx.get());
         c.zy.jump(c.zy.get());
         c.zs.jump(s);
-      } else {
+      };
+      if (L0.vertical) {
+        if (sideways && sidewaysOn(drag)) startDismiss(dx > 0 ? 1 : -1);
+        // At the top pulling down, or at the bottom pushing up: the previous or next page.
+        else if (!sideways && ((dy > 0 && atTop) || (dy < 0 && atBottom))) startPaging();
+        else {
+          G.axis = "none";
+          return false;
+        }
+      } else if (sideways) startPaging();
+      // At the top pulling down, or at the bottom pulling up: a dismiss drag.
+      else if ((dy > 0 && drag.top && atTop) || (dy < 0 && drag.bottom && atBottom)) startDismiss(dy > 0 ? 1 : -1);
+      else {
         G.axis = "none";
         return false;
       }
@@ -142,26 +169,27 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       root.classList.add("zoom-dragging");
     }
     const L = c.layout();
-    if (G.axis === "x") {
-      let v = G.startTrack + dx;
-      const max = c.targetX(0);
-      const min = c.targetX(c.count() - 1);
-      if (v > max) v = max + rubber(v - max, L.W);
-      else if (v < min) v = min - rubber(min - v, L.W);
-      c.trackX.jump(v);
+    if (G.axis === "page") {
+      let v = G.startTrack + (L.vertical ? dy : dx);
+      const max = c.trackAt(0);
+      const min = c.trackAt(c.count() - 1);
+      const size = L.vertical ? L.H : L.W;
+      if (v > max) v = max + rubber(v - max, size);
+      else if (v < min) v = min - rubber(min - v, size);
+      c.track.jump(v);
       return true;
     }
-    if (G.axis === "y") {
+    if (G.axis === "dismiss") {
       const { cx, cy } = pivot(G.dir);
       // How far the card has been pulled in the dismiss direction; pushing back
-      // past where it started rubber-bands.
-      const pulled = G.dir * (G.ty0 + dy);
-      const amount = pulled >= 0 ? pulled : -rubber(-pulled, L.H);
-      const k = 1 - clamp(amount / (L.H * 0.9), 0, 1) * c.dismiss().maxShrink;
-      G.ty = amount;
+      // past where it started rubber-bands. The other axis follows the finger freely.
+      const pulled = G.dir * (L.vertical ? G.tx0 + dx : G.ty0 + dy);
+      const amount = pulled >= 0 ? pulled : -rubber(-pulled, L.vertical ? L.W : L.H);
+      const k = 1 - clamp(amount / pullSpan(L), 0, 1) * c.dismiss().maxShrink;
+      G.pulled = amount;
       c.zs.jump(k);
-      c.zx.jump(cx * (1 - k) + G.tx0 + dx);
-      c.zy.jump(cy * (1 - k) + G.dir * amount);
+      c.zx.jump(cx * (1 - k) + (L.vertical ? G.dir * amount : G.tx0 + dx));
+      c.zy.jump(cy * (1 - k) + (L.vertical ? G.ty0 + dy : G.dir * amount));
       return true;
     }
     return false;
@@ -170,34 +198,39 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   const end = (t: number) => {
     if (!G.on) return;
     G.on = false;
-    if (G.axis === "x") {
+    if (G.axis === "page") {
       const L = c.layout();
-      const v = clamp(velocity(t).vx, -4000, 4000);
-      const projected = c.trackX.get() + project(v);
-      let i = Math.round((L.side - projected) / L.step);
+      const fling = velocity(t);
+      const v = clamp(L.vertical ? fling.vy : fling.vx, -4000, 4000);
+      const projected = c.track.get() + project(v);
+      let i = Math.round((c.trackAt(0) - projected) / L.step);
       i = clamp(clamp(i, G.startIndex - 1, G.startIndex + 1), 0, c.count() - 1);
       if (i !== c.index()) c.setIndex(i);
       c.settlePage(i, v);
-    } else if (G.axis === "y") {
+    } else if (G.axis === "dismiss") {
       const { vx, vy } = velocity(t);
       const d = c.dismiss();
       const L = c.layout();
       const { cx, cy } = pivot(G.dir);
       // The card was shrinking with the finger, not just moving: hand the spring the
       // full motion (scale speed included), or the shrink stalls for a moment on release.
-      const span = L.H * 0.9;
-      const vPull = G.dir * vy; // speed in the dismiss direction
-      const shrinking = G.ty > 0 && G.ty < span;
+      const span = pullSpan(L);
+      const vAlong = L.vertical ? vx : vy; // along the pull's axis
+      const vAcross = L.vertical ? vy : vx;
+      const vPull = G.dir * vAlong; // speed in the dismiss direction
+      const shrinking = G.pulled > 0 && G.pulled < span;
       const vs = shrinking ? -(d.maxShrink / span) * vPull : 0;
-      const vty = G.ty >= 0 ? vy : 0;
-      const zoomVelocity = { vx: vx - cx * vs, vy: vty - cy * vs, vs };
-      if (G.ty > d.distance || (vPull > d.velocity && G.ty > d.minDistance)) c.close(zoomVelocity);
+      const vMain = G.pulled >= 0 ? vAlong : 0;
+      const zoomVelocity = L.vertical
+        ? { vx: vMain - cx * vs, vy: vAcross - cy * vs, vs }
+        : { vx: vAcross - cx * vs, vy: vMain - cy * vs, vs };
+      if (G.pulled > d.distance || (vPull > d.velocity && G.pulled > d.minDistance)) c.close(zoomVelocity);
       else c.cancelDismiss(zoomVelocity);
     }
     // Restoring the card's scrolling triggers a style recalculation; do it after the
     // close has taken its measurements rather than before.
     root.classList.remove("zoom-dragging");
-    if (G.axis === "x" || G.axis === "y") suppressClickUntil = performance.now() + 150;
+    if (G.axis === "page" || G.axis === "dismiss") suppressClickUntil = performance.now() + 150;
   };
 
   const onTouchStart = (e: TouchEvent) => {
@@ -340,32 +373,40 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     minAtEdge: Infinity,
     armedTop: false,
     armedBottom: false,
-    pulling: 0 as 0 | 1 | -1, // 1: pulling down from the top, -1: pulling up from the bottom
+    /**
+     * 1: pulling down from the top (vertical pager: to the right), -1: pulling up
+     * from the bottom (vertical pager: to the left).
+     */
+    pulling: 0 as 0 | 1 | -1,
     acc: 0,
     endTimer: 0,
   };
-  const pull = motionValue(0); // the card's offset, smoothed so wheel notches glide
+  // The card's offset along the pull, smoothed so wheel notches glide. A horizontal
+  // pager pulls the card down or up; a vertical one pulls it sideways.
+  const pull = motionValue(0);
   let mapping = false;
-  pull.on("change", (ty) => {
+  pull.on("change", (t) => {
     if (!mapping) return;
     const L = c.layout();
-    const { cx, cy } = pivot(ty < 0 ? -1 : 1);
-    const k = 1 - clamp(Math.abs(ty) / (L.H * 0.9), 0, 1) * c.dismiss().maxShrink;
+    const { cx, cy } = pivot(t < 0 ? -1 : 1);
+    const k = 1 - clamp(Math.abs(t) / pullSpan(L), 0, 1) * c.dismiss().maxShrink;
     c.zs.jump(k);
-    c.zx.jump(cx * (1 - k));
-    c.zy.jump(cy * (1 - k) + ty);
+    c.zx.jump(cx * (1 - k) + (L.vertical ? t : 0));
+    c.zy.jump(cy * (1 - k) + (L.vertical ? 0 : t));
   });
   const SMOOTH = { duration: 0.16, bounce: 0 };
-  const pullTo = (ty: number) => springTo(pull, ty, SMOOTH, { speed: c.speed(), restDelta: REST.px });
-  const visualPull = (acc: number) => {
+  const pullTo = (t: number) => springTo(pull, t, SMOOTH, { speed: c.speed(), restDelta: REST.px });
+  /** How far the rubber band stretches for a pull. */
+  const pullStretch = () => {
     const L = c.layout();
-    return Math.sign(acc) * rubber(Math.abs(acc), L.H * 0.6);
+    return (L.vertical ? L.W : L.H) * 0.6;
   };
+  const visualPull = (acc: number) => Math.sign(acc) * rubber(Math.abs(acc), pullStretch());
   /** The scroll distance that would put the card where it visibly is now. */
-  const pullFromVisual = (ty: number) => {
-    const d = c.layout().H * 0.6;
-    const r = Math.min(Math.abs(ty) / d, 0.999);
-    return Math.sign(ty) * ((1 / (1 - r) - 1) * d) / 0.55;
+  const pullFromVisual = (t: number) => {
+    const d = pullStretch();
+    const r = Math.min(Math.abs(t) / d, 0.999);
+    return Math.sign(t) * ((1 / (1 - r) - 1) * d) / 0.55;
   };
   const stopPulling = () => {
     W.pulling = 0;
@@ -377,33 +418,66 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   const commitWheelDismiss = () => {
     const L = c.layout();
     const d = c.dismiss();
-    const ty = pull.get();
-    const { cx, cy } = pivot(ty < 0 ? -1 : 1);
-    const vty = pull.getVelocity();
-    const span = L.H * 0.9;
-    const vs = -(d.maxShrink / span) * Math.sign(ty) * vty;
+    const t = pull.get();
+    const { cx, cy } = pivot(t < 0 ? -1 : 1);
+    const vt = pull.getVelocity();
+    const vs = -(d.maxShrink / pullSpan(L)) * Math.sign(t) * vt;
     pull.stop();
     mapping = false;
     W.pulling = 0;
     W.acc = 0;
-    swallowMomentum(-Math.sign(ty)); // eat the rest of this scroll's momentum (it scrolled the other way to the pull)
+    // Eat the rest of this scroll's momentum (it scrolled the other way to the pull).
+    swallowMomentum(-Math.sign(t), L.vertical ? "x" : "y");
     clearTimeout(W.endTimer);
     // The pull's speed comes from smoothing, not a hand: only keep what heads home.
-    c.close({ vx: -cx * vs, vy: vty - cy * vs, vs }, { towardTargetOnly: true });
+    const v = L.vertical ? { vx: vt - cx * vs, vy: -cy * vs, vs } : { vx: -cx * vs, vy: vt - cy * vs, vs };
+    c.close(v, { towardTargetOnly: true });
   };
-  const wheelDelta = (e: WheelEvent) => (e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * c.layout().H : e.deltaY);
+  /** Start pulling the card in `direction` (1 or -1), carrying on from a pull still springing back. */
+  const beginPull = (direction: 1 | -1) => {
+    W.pulling = direction;
+    // If the card is still springing back from a pull a moment ago, carry on
+    // from where it visibly is instead of starting over from zero.
+    const visible = pull.get();
+    W.acc = Math.sign(visible) === W.pulling ? pullFromVisual(visible) : 0;
+    mapping = true;
+  };
+  /** One wheel event's worth of pull; closes past wheelDistance, springs back after a pause. */
+  const pullBy = (delta: number) => {
+    W.acc -= delta; // scrolling up pulls the card down, and vice versa (sideways likewise)
+    if (Math.sign(W.acc) !== W.pulling) {
+      // Scrolled back past where the pull began: hand back to normal scrolling.
+      stopPulling();
+      return;
+    }
+    if (Math.abs(W.acc) >= c.dismiss().wheelDistance) {
+      commitWheelDismiss();
+      return;
+    }
+    pullTo(visualPull(W.acc));
+    clearTimeout(W.endTimer);
+    W.endTimer = window.setTimeout(() => {
+      if (W.pulling) stopPulling(); // let go before the threshold: spring back
+    }, END_MS);
+  };
+  const wheelDelta = (e: WheelEvent, axis: "x" | "y" = "y") => {
+    const d = axis === "x" ? e.deltaX : e.deltaY;
+    if (e.deltaMode === 1) return d * 16;
+    if (e.deltaMode === 2) return d * (axis === "x" ? c.layout().W : c.layout().H);
+    return d;
+  };
 
-  const onVerticalWheel = (e: WheelEvent) => {
-    const d = c.dismiss();
-    if (!d.wheel.top && !d.wheel.bottom) return;
-    const scroller = c.activeScroller();
-    if (!scroller) return;
+  /**
+   * Arms the top or bottom edge when this vertical wheel event is a new swipe made
+   * with the content resting at (or within the slop of) that edge, as described
+   * above. Returns where the content is.
+   */
+  const armEdges = (dy: number, scroller: HTMLElement, edges: DismissEdges, slop: number) => {
     const now = performance.now();
     const fromTopEdge = scroller.scrollTop;
     const fromBottomEdge = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
     const atTop = fromTopEdge <= 1;
     const atBottom = fromBottomEdge <= 1;
-    const dy = wheelDelta(e);
     const step = Math.abs(dy);
     const gap = now - W.lastT;
     const atEdgeThisWay = (dy < 0 && atTop) || (dy > 0 && atBottom);
@@ -411,11 +485,10 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     if (gap > QUIET_MS) {
       // After a real pause: arm an edge if the content is resting at or near it.
       const settled = now - W.lastScrollT > QUIET_MS;
-      const slop = d.wheelEdgeSlop;
-      W.armedTop = d.wheel.top && settled && fromTopEdge <= slop;
-      W.armedBottom = d.wheel.bottom && settled && fromBottomEdge <= slop;
+      W.armedTop = edges.top && settled && fromTopEdge <= slop;
+      W.armedBottom = edges.bottom && settled && fromBottomEdge <= slop;
       W.minAtEdge = Infinity;
-    } else if (atEdgeThisWay && still && (dy < 0 ? d.wheel.top && !W.armedTop : d.wheel.bottom && !W.armedBottom)) {
+    } else if (atEdgeThisWay && still && (dy < 0 ? edges.top && !W.armedTop : edges.bottom && !W.armedBottom)) {
       // A quick second swipe, already at the edge.
       const fingersBack = W.minAtEdge <= DIP && step >= W.minAtEdge * 1.8 + 3;
       const wheelAgain = gap >= MOUSE_GAP_MS && step >= 40 && step === W.prevAbs;
@@ -428,66 +501,111 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     W.prevAbs = step;
     W.lastT = now;
     showArmed();
+    return { atTop, atBottom };
+  };
+
+  // Horizontal pager: scrolling past the top (or bottom) of the card pulls it to close.
+  const onVerticalWheel = (e: WheelEvent) => {
+    const d = c.dismiss();
+    if (!d.wheel.top && !d.wheel.bottom) return;
+    const scroller = c.activeScroller();
+    if (!scroller) return;
+    const dy = wheelDelta(e);
+    const { atTop, atBottom } = armEdges(dy, scroller, d.wheel, d.wheelEdgeSlop);
     if (!W.pulling) {
       const fromTop = dy < 0 && atTop && W.armedTop && d.wheel.top;
       const fromBottom = dy > 0 && atBottom && W.armedBottom && d.wheel.bottom;
       if (!fromTop && !fromBottom) return; // ordinary scrolling inside the card
-      W.pulling = fromTop ? 1 : -1;
-      // If the card is still springing back from a pull a moment ago, carry on
-      // from where it visibly is instead of starting over from zero.
-      const visible = pull.get();
-      W.acc = Math.sign(visible) === W.pulling ? pullFromVisual(visible) : 0;
-      mapping = true;
+      beginPull(fromTop ? 1 : -1);
     }
     e.preventDefault();
-    W.acc -= dy; // scrolling up pulls the card down, and vice versa
-    if (Math.sign(W.acc) !== W.pulling) {
-      // Scrolled back past where the pull began: hand back to normal scrolling.
-      stopPulling();
-      return;
-    }
-    if (Math.abs(W.acc) >= d.wheelDistance) {
-      commitWheelDismiss();
-      return;
-    }
-    pullTo(visualPull(W.acc));
-    clearTimeout(W.endTimer);
-    W.endTimer = window.setTimeout(() => {
-      if (W.pulling) stopPulling(); // let go before the threshold: spring back
-    }, END_MS);
+    pullBy(dy);
   };
 
-  // Trackpad: a sideways two-finger swipe turns one page. The rest of that swipe,
-  // its momentum included, is ignored, but a new swipe turns the next page right
-  // away, even while the last one's momentum is still arriving (as arrow keys can).
-  // A new swipe is told apart from momentum the same way as for wheel dismiss:
+  // Vertical pager: scrolling sideways pulls the card to close, either way. There's
+  // nothing to scroll sideways, so there's no edge to wait for: the pull starts at once.
+  const onSidewaysWheel = (e: WheelEvent) => {
+    // Always ours, so a sideways swipe never reaches the browser's swipe-back navigation.
+    e.preventDefault();
+    if (!sidewaysOn(c.dismiss().wheel)) return;
+    const dx = wheelDelta(e, "x");
+    if (!dx) return;
+    if (!W.pulling) beginPull(dx < 0 ? 1 : -1);
+    pullBy(dx);
+  };
+
+  // Trackpad: a two-finger swipe along the pager turns one page. The rest of that
+  // swipe, its momentum included, is ignored, but a new swipe turns the next page
+  // right away, even while the last one's momentum is still arriving (as arrow keys
+  // can). A new swipe is told apart from momentum the same way as for wheel dismiss:
   // momentum only ever slows, so the speed dipping and picking up again is fingers
   // back down. A swipe the other way, or after a real pause, is always new.
-  const SWIPE_PX = 40; // sideways travel that turns a page
+  const SWIPE_PX = 40; // travel that turns a page
   const pageTail = swipeTail();
   let pageAcc = 0;
   let pageLastT = 0;
-  const onHorizontalWheel = (e: WheelEvent) => {
-    e.preventDefault();
-    const now = performance.now();
-    const dx = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaMode === 2 ? e.deltaX * c.layout().W : e.deltaX;
-    // macOS can pause ~200 ms between the fingers lifting and momentum starting, so
-    // only a longer quiet spell starts the count again.
+  // macOS can pause ~200 ms between the fingers lifting and momentum starting, so
+  // only a longer quiet spell starts the count again.
+  const pageClock = (now: number) => {
     if (now - pageLastT > QUIET_MS) pageAcc = 0;
     pageLastT = now;
-    if (!dx || pageTail.owns(dx, now)) return;
-    if (Math.sign(pageAcc) !== Math.sign(dx)) pageAcc = 0;
-    pageAcc += dx;
+  };
+  /** Counts a swipe's travel along the pager, turning a page once it's far enough. */
+  const pageBy = (delta: number) => {
+    if (Math.sign(pageAcc) !== Math.sign(delta)) pageAcc = 0;
+    pageAcc += delta;
     if (Math.abs(pageAcc) > SWIPE_PX) {
-      c.page(Math.sign(dx));
-      pageTail.start(Math.sign(dx));
+      c.page(Math.sign(delta));
+      pageTail.start(Math.sign(delta));
       pageAcc = 0;
     }
   };
+  // Horizontal pager: sideways swipes page.
+  const onHorizontalWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const now = performance.now();
+    const dx = wheelDelta(e, "x");
+    pageClock(now);
+    if (!dx || pageTail.owns(dx, now)) return;
+    pageBy(dx);
+  };
+  // Vertical pager: vertical swipes page, once the card's own content has reached
+  // its top or bottom. As with closing, a swipe that runs into the edge doesn't turn
+  // the page; a new swipe made at the edge does, so a long card can be read to the
+  // end without flying past it.
+  const onVerticalPagingWheel = (e: WheelEvent) => {
+    const scroller = c.activeScroller();
+    if (!scroller) return;
+    const now = performance.now();
+    const dy = wheelDelta(e);
+    if (!dy) return;
+    const afterPage = pageTail.active;
+    if (pageTail.owns(dy, now)) {
+      // What's left of a swipe that turned a page: it mustn't scroll the new card.
+      e.preventDefault();
+      pageClock(now);
+      return;
+    }
+    const { atTop, atBottom } = armEdges(dy, scroller, { top: true, bottom: true }, c.dismiss().wheelEdgeSlop);
+    const atEdgeThisWay = dy < 0 ? atTop : atBottom;
+    // A new swipe straight after a page turn: at the edge, it turns the next one.
+    if (afterPage && atEdgeThisWay) {
+      if (dy < 0) W.armedTop = true;
+      else W.armedBottom = true;
+    }
+    if (!atEdgeThisWay || !(dy < 0 ? W.armedTop : W.armedBottom)) return; // scrolls the card's content
+    e.preventDefault();
+    pageClock(now);
+    pageBy(dy);
+  };
   const onWheel = (e: WheelEvent) => {
     if (c.phase() !== "open") return;
-    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) onVerticalWheel(e);
-    else onHorizontalWheel(e);
+    const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (c.layout().vertical) {
+      if (sideways) onSidewaysWheel(e);
+      else onVerticalPagingWheel(e);
+    } else if (sideways) onHorizontalWheel(e);
+    else onVerticalWheel(e);
   };
 
   const onClick = (e: MouseEvent) => {
@@ -520,7 +638,12 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       return;
     }
     const r = card.getBoundingClientRect();
-    if (e.clientX < r.left) c.page(-1);
+    if (c.layout().vertical) {
+      // Above or below: the neighbour peeking there. Beside the card: close.
+      if (e.clientY < r.top) c.page(-1);
+      else if (e.clientY > r.bottom) c.page(1);
+      else c.close();
+    } else if (e.clientX < r.left) c.page(-1);
     else if (e.clientX > r.right) c.page(1);
     else if (e.clientY < r.top) c.close();
   };
@@ -557,7 +680,9 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     closeTail.end();
     window.removeEventListener("wheel", onWindowWheel, { capture: true });
   };
-  function swallowMomentum(direction: number) {
+  let swallowAxis: "x" | "y" = "y";
+  function swallowMomentum(direction: number, axis: "x" | "y") {
+    swallowAxis = axis;
     closeTail.start(direction);
     window.addEventListener("wheel", onWindowWheel, { passive: false, capture: true });
     clearTimeout(swallowTimer);
@@ -565,7 +690,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     stopWhenQuiet();
   }
   function onWindowWheel(e: WheelEvent) {
-    if (closeTail.owns(wheelDelta(e), performance.now())) {
+    if (closeTail.owns(wheelDelta(e, swallowAxis), performance.now())) {
       e.preventDefault();
       stopWhenQuiet();
     } else if (!closeTail.active) stopSwallowing();

@@ -17,7 +17,8 @@ and closing sends every card back to its own source.
   - `flight.ts` — the flying copy of the hero
   - `springs.ts` — SwiftUI-style springs (duration + bounce) mapped to Motion
   - `zoom.css` — required styles; theme with the `--zoom-*` properties
-- `demo/` — the Book Store, rebuilt on the system
+- `demo/` — the Book Store, rebuilt on the system, in two layouts: shelves that page
+  sideways (`BookStore.tsx`) and a feed that pages up and down (`BookFeed.tsx`)
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.
@@ -153,6 +154,19 @@ React island, or keep the markup in Astro and use one small island with `scan`
   card). They brighten while the content is in the zone and again while a swipe is armed.
   Only edges with wheel dismissal on get a band.
 - `paging` — swipe between a group's items (default true).
+- `orientation` — how a group's cards are laid out and swiped through:
+  - `"horizontal"` (default): side by side. Swipe sideways to page; pull down to close.
+  - `"vertical"`: stacked like a feed, one card per page. Swipe, drag or scroll up and
+    down to page (Up/Down arrows too); drag or scroll a card sideways, either way, to
+    close (Escape and the close button still work). A card's own content scrolls first;
+    paging takes over at its top and bottom, and as with closing, a swipe that runs
+    into the edge doesn't turn the page — a new swipe there does. `dismiss.drag` and
+    `dismiss.wheel` set to `false` turn the sideways close off; other edge settings
+    don't apply. Tapping above or below the card pages, beside it closes.
+
+  ```tsx
+  <ZoomProvider orientation="vertical" geometry={{ top: 8, bottom: 8, side: 8, gap: 8 }} ...>
+  ```
 - `hideGroupWhileOpen` — hide the whole group on the page while open (default true).
 - `closeButton` — `true`, `false`, or `(close) => <YourButton/>`.
 - `history` — off by default. `{ mode: "session" }`: opening adds one history entry,
