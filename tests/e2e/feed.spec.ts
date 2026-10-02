@@ -85,10 +85,12 @@ test("one vertical swipe and its momentum turn one page", async ({ page }) => {
 test("a vertical touch drag pages, and never closes", async ({ page }) => {
   await openFeed(page);
   const all = await ids(page);
-  await touchPath(page, 200, 650, 200, 250);
+  // Farther than half a card, so they turn the page whatever the fling speed reads
+  // (under load, the last move can land too long before the release to measure one).
+  await touchPath(page, 200, 700, 200, 120);
   await expect.poll(() => active(page)).toBe(all[5]);
   await page.waitForTimeout(400);
-  await touchPath(page, 200, 250, 200, 750);
+  await touchPath(page, 200, 120, 200, 760);
   await expect.poll(() => active(page)).toBe(all[4]);
   await expectStaysOpen(page);
 });

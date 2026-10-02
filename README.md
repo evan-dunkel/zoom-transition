@@ -158,7 +158,8 @@ React island, or keep the markup in Astro and use one small island with `scan`
   `{ swipeDistance: 40, atEdge: "new-swipe" }`. `swipeDistance` is how far (px) a trackpad
   or wheel swipe travels before it turns the page. `atEdge` (vertical pager) is what
   scrolling into the end of a card's content does: `"new-swipe"` stops there and a new
-  swipe turns the page; `"continue"` turns it straight away. How quickly a page turn
+  swipe turns the page; `"continue"` turns it straight away and lets the swipe carry
+  on into the next card's content, so the cards read as one continuous stream. How quickly a page turn
   settles is `timing.page` (default 0.5 s, no bounce).
 - `orientation` — how a group's cards are laid out and swiped through:
   - `"horizontal"` (default): side by side. Swipe sideways to page; pull down to close.

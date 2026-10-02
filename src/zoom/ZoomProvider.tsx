@@ -98,8 +98,8 @@ export type ZoomPaging = {
   /**
    * Vertical pager: what scrolling into the top or bottom of a card's content does.
    * "new-swipe" (default): it stops there, and a new swipe turns the page, so a long
-   * read can't fly past its end. "continue": it turns the page straight away, so one
-   * swipe can carry on into the next card.
+   * read can't fly past its end. "continue": it turns the page straight away and the
+   * swipe carries on into the next card's content, so the cards read as one stream.
    */
   atEdge: "new-swipe" | "continue";
 };

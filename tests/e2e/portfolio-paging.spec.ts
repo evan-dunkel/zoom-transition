@@ -180,3 +180,55 @@ test("cards in a vertical pager don't bounce at their ends; horizontal ones stil
   await expect.poll(() => phase(page)).toBe("open");
   expect(await page.locator(".zoom-card:not([inert]) .zoom-card-scroll").evaluate((el) => getComputedStyle(el).overscrollBehaviorY)).toBe("contain");
 });
+
+/** Quick flicks in a row: each one starts while the last one's momentum is still running. */
+async function flicks(page: Page, d: number, count: number) {
+  const flick = [14, 32, 55, 70, 64, 56, 49, 43, 38, 34];
+  for (let k = 0; k < count; k++) {
+    for (const v of flick) {
+      await page.mouse.wheel(0, d * v);
+      await page.waitForTimeout(16);
+    }
+  }
+}
+
+for (const dir of ["down", "up"] as const) {
+  test(`quick flicks in a row (${dir}) carry on reading into the next piece`, async ({ page }) => {
+    await openSecondProject(page);
+    const d = dir === "down" ? 1 : -1;
+    // Near the end of the piece (in the direction of travel).
+    const next = dir === "down" ? 2 : 0;
+    await page.evaluate(([d, next]) => {
+      const all = document.querySelectorAll<HTMLElement>(".zoom-card .zoom-card-scroll");
+      const sc = document.querySelector<HTMLElement>(".zoom-card:not([inert]) .zoom-card-scroll")!;
+      sc.scrollTop = d > 0 ? sc.scrollHeight - sc.clientHeight - 200 : 200;
+      // The next piece waits at its start: its top going down, its end going back up.
+      all[next].scrollTop = d > 0 ? 0 : all[next].scrollHeight;
+    }, [d, next]);
+    const start = (await scrollTops(page))[next];
+    await page.waitForTimeout(400);
+    await page.mouse.move(215, 450);
+    // One flick reaches the end, the next turns the page, and the ones after read on.
+    await flicks(page, d, 5);
+    expect(await active(page)).toBe(dir === "down" ? "atlas-clinic" : "tidewater-transit");
+    const moved = Math.abs((await scrollTops(page))[next] - start);
+    expect(moved).toBeGreaterThan(400);
+  });
+}
+
+test(`"Keep going" reads the pieces as one stream: a single flick carries on into the next`, async ({ page }) => {
+  await page.goto("/dist/");
+  await page.getByRole("button", { name: "Portfolio" }).click();
+  await page.locator("#pf-edge").selectOption("continue");
+  await page.locator(".pf-tile").first().click();
+  await expect.poll(() => phase(page)).toBe("open");
+  await page.evaluate(() => {
+    const sc = document.querySelector<HTMLElement>(".zoom-card:not([inert]) .zoom-card-scroll")!;
+    sc.scrollTop = sc.scrollHeight - sc.clientHeight - 100;
+  });
+  await page.waitForTimeout(400);
+  await page.mouse.move(215, 450);
+  await flicks(page, 1, 1);
+  await expect.poll(() => active(page)).toBe("fernwood-reader");
+  expect((await scrollTops(page))[1]).toBeGreaterThan(100); // the same flick read on into it
+});

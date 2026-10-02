@@ -391,20 +391,33 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
 
   /**
    * Follows a swipe that has already done its job (turned a page, closed the card),
-   * to tell what's left of it from a new swipe. Momentum only ever slows, so the
-   * speed dipping to almost nothing and picking up again is fingers back down; a
-   * real pause (QUIET_MS) also ends it. Movement the other way is never part of
-   * it, but doesn't end it either: momentum the old way can still be arriving.
+   * to tell what's left of it from a new swipe, so a new swipe acts at once even
+   * mid-momentum (quick flicks in a row). A real pause (QUIET_MS) always ends it.
+   *
+   * Momentum only ever slows. But the swipe is often still speeding up when it acts
+   * (the page turns a few events in), and that mustn't read as a new swipe. So the
+   * tail first waits for the swipe to start slowing (two falls in a row); from then
+   * on, any clear rise in speed is fingers pushing again. Before that, only the
+   * strict sign counts: the speed dipping to almost nothing and picking up again.
+   * Movement the other way is never part of it, but doesn't end it either: momentum
+   * the old way can still be arriving.
    */
   const swipeTail = () => {
     let dir = 0;
     let min = Infinity;
     let lastT = 0;
+    let prev = 0;
+    let falls = 0;
+    /** Smallest step since the swipe started slowing (Infinity until it has). */
+    let minSlowing = Infinity;
     return {
       start(direction: number) {
         dir = direction;
         min = Infinity;
         lastT = performance.now();
+        prev = 0;
+        falls = 0;
+        minSlowing = Infinity;
       },
       end() {
         dir = 0;
@@ -415,12 +428,17 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
         const quiet = now - lastT > QUIET_MS;
         lastT = now;
         const step = Math.abs(delta);
-        if (quiet || (min <= DIP && step >= min * 1.8 + 3)) {
+        const dipAndRise = min <= DIP && step >= min * 1.8 + 3;
+        const riseWhileSlowing = minSlowing !== Infinity && step >= minSlowing * 1.5 + 4;
+        if (quiet || dipAndRise || riseWhileSlowing) {
           dir = 0; // a new swipe
           return false;
         }
         if (Math.sign(delta) !== dir) return false;
         min = Math.min(min, step);
+        falls = step < prev ? falls + 1 : step > prev ? 0 : falls;
+        prev = step;
+        if (falls >= 2 || minSlowing !== Infinity) minSlowing = Math.min(minSlowing, step);
         return true;
       },
       get active() {
@@ -650,9 +668,12 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     const now = performance.now();
     const dy = wheelDelta(e);
     if (!dy) return;
+    const keepGoing = c.paging().atEdge === "continue";
     const afterPage = pageTail.active;
-    if (pageTail.owns(dy, now)) {
-      // What's left of a swipe that turned a page: it mustn't scroll the new card.
+    // What's left of a swipe that turned a page mustn't scroll the new card, unless
+    // paging is set to keep going: then the cards read as one continuous stream and
+    // the swipe carries on into the next card's content.
+    if (!keepGoing && pageTail.owns(dy, now)) {
       e.preventDefault();
       pageClock(now);
       return;
@@ -664,7 +685,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       if (dy < 0) W.armedTop = true;
       else W.armedBottom = true;
     }
-    const armed = c.paging().atEdge === "continue" || (dy < 0 ? W.armedTop : W.armedBottom);
+    const armed = keepGoing || (dy < 0 ? W.armedTop : W.armedBottom);
     if (!atEdgeThisWay || !armed) {
       // Scrolls the card's content. Natively when the pointer is over it; by hand while
       // a page turn is still settling (hit-testing a card that's moving is unreliable,
