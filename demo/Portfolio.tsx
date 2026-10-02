@@ -400,7 +400,7 @@ export function Portfolio({ switcher }: { switcher?: ReactNode }) {
                 At the end
                 <select id="pf-edge" value={fields.atEdge} onChange={(e) => update("atEdge", e.target.value)}>
                   <option value="new-swipe">Stop; a new swipe turns</option>
-                  <option value="continue">Keep going into the next</option>
+                  <option value="continue">Keep going: one stream</option>
                 </select>
               </label>
               <button type="button" className="pf-reset" onClick={reset}>

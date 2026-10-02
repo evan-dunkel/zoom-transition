@@ -221,7 +221,7 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   page once the content is at an edge, armed exactly like wheel dismiss
   (`armEdges`, shared), and a page turn's momentum is swallowed (`pageTail`) so it
   can't scroll the new card. `paging.atEdge: "continue"` skips the arming (reaching the
-  edge pages at once); `paging.swipeDistance` replaces the old fixed 40 px. Scrolling
+  edge pages at once) and the tail (the swipe carries on into the new card: one stream); `paging.swipeDistance` replaces the old fixed 40 px. Scrolling
   off the visible card (the inert card being left mid page turn, a gap, the backdrop)
   scrolls the visible card by hand (`offCard`): inert cards aren't hit-testable, so
   native scrolling there did nothing until the new card slid under the pointer, which
@@ -241,8 +241,11 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   (`sidewaysOn`). Debug edge zones aren't drawn.
 - `swipeTail()` follows a swipe that has already acted (turned a page, closed the
   card) so its leftover momentum is ignored but a **new swipe acts at once**, even
-  mid-momentum: speed dipping ≤ DIP then rising (fingers back down), or QUIET_MS of
-  quiet. Movement the other way is never part of the tail (so swiping back turns
+  mid-momentum: once the swipe has started slowing (two falls in a row), any clear
+  rise (step ≥ min·1.5 + 4) is a new swipe; before that only speed dipping ≤ DIP then
+  rising counts (the swipe is often still speeding up when it turns the page, and that
+  mustn't read as new); or QUIET_MS of quiet. The dip-only rule swallowed quick flicks
+  in a row after a page turn until the reader paused. Movement the other way is never part of the tail (so swiping back turns
   back) but doesn't end it. Used by trackpad paging and by the post-dismiss
   momentum swallowing. Previously both locks were extended by every event, so they
   held until macOS stopped sending events, i.e. until the pointer moved.
