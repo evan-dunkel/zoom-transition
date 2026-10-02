@@ -5,6 +5,7 @@ import {
   expectStaysOpen,
   mouseDrag,
   openBook,
+  phase,
   scrollCardTo,
   touchDrag,
   wheelSwipe,
@@ -120,6 +121,40 @@ test.describe("mouse drag dismissal follows the drag option", () => {
     await openBook(page);
     await mouseDrag(page, 215, 300, 560);
     await expectStaysOpen(page);
+  });
+});
+
+test.describe("after a wheel dismiss", () => {
+  const store = (page: import("@playwright/test").Page) => page.locator(".store").evaluate((el) => el.scrollTop);
+  const momentum = (from: number, to: number) => {
+    const out: number[] = [];
+    for (let d = from; d >= to; d *= 0.85) out.push(Math.round(d));
+    return out;
+  };
+  const wheelY = async (page: import("@playwright/test").Page, deltas: number[]) => {
+    for (const dy of deltas) {
+      await page.mouse.wheel(0, dy);
+      await page.waitForTimeout(16);
+    }
+  };
+
+  test("the swipe's momentum doesn't scroll the page behind", async ({ page }) => {
+    await openBook(page);
+    await scrollCardTo(page, "bottom");
+    await wheelSwipe(page, 60); // closes past the bottom
+    await wheelY(page, momentum(40, 1));
+    await expectCloses(page);
+    expect(await store(page)).toBe(0);
+  });
+
+  test("a new scroll right away scrolls the page, without moving the pointer", async ({ page }) => {
+    await openBook(page);
+    await scrollCardTo(page, "bottom");
+    await wheelSwipe(page, 60);
+    await wheelY(page, momentum(40, 12)); // fingers back down mid-momentum
+    expect(await phase(page)).toBe("idle");
+    await wheelY(page, [3, 8, 16, 26, 32, 32]);
+    await expect.poll(() => store(page)).toBeGreaterThan(0);
   });
 });
 

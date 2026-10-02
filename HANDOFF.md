@@ -196,7 +196,14 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   Release hands the spring the **full zoom velocity incl. scale**.
 - Paging: rubber band at ends, projection picks the page (±1), keyboard arrows
   page **also while opening** (flights follow the track), trackpad horizontal
-  swipe pages once per swipe.
+  swipe pages once per swipe (40 px of travel).
+- `swipeTail()` follows a swipe that has already acted (turned a page, closed the
+  card) so its leftover momentum is ignored but a **new swipe acts at once**, even
+  mid-momentum: speed dipping ≤ DIP then rising (fingers back down), or QUIET_MS of
+  quiet. Movement the other way is never part of the tail (so swiping back turns
+  back) but doesn't end it. Used by trackpad paging and by the post-dismiss
+  momentum swallowing. Previously both locks were extended by every event, so they
+  held until macOS stopped sending events, i.e. until the pointer moved.
 - Wheel/trackpad dismiss (`dismiss.wheel`, `wheelDistance` 240, `wheelEdgeSlop` 32):
   a swipe that runs into an edge never closes. A pull is armed only by a
   new swipe at the edge: after QUIET_MS 250 of stillness (and within slop), or
@@ -205,8 +212,8 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   STILL_MS 50. Release = END_MS 350 quiet (macOS pauses ~200 ms between finger
   lift and momentum). Pull is smoothed by a 0.16 s spring; on commit only
   velocity heading home is kept (`towardTargetOnly`); leftover momentum is
-  swallowed until the wheel is quiet for 250 ms (a non-passive window `wheel` listener
-  attached only for that moment). Root data flags `zoneTop/Bottom`, `armedTop/Bottom`
+  swallowed (a non-passive window `wheel` listener attached only for that moment)
+  until a new scroll starts (`swipeTail`), the wheel is quiet for QUIET_MS, or 2 s pass. Root data flags `zoneTop/Bottom`, `armedTop/Bottom`
   drive the debug bands; they're only tracked when `debug` is on.
 - Window listeners are attached only while needed: `pointermove`/`pointerup` during
   a mouse drag, the momentum-swallowing `wheel` after a wheel dismiss. Nothing on

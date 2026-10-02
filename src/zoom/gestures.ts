@@ -292,6 +292,46 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   const STILL_MS = 50; // content must have stopped at the edge this long
   const DIP = 8; // px per event: "almost stopped"
   const MOUSE_GAP_MS = 140; // notches within one spin come faster than this; a new spin comes after a beat
+
+  /**
+   * Follows a swipe that has already done its job (turned a page, closed the card),
+   * to tell what's left of it from a new swipe. Momentum only ever slows, so the
+   * speed dipping to almost nothing and picking up again is fingers back down; a
+   * real pause (QUIET_MS) also ends it. Movement the other way is never part of
+   * it, but doesn't end it either: momentum the old way can still be arriving.
+   */
+  const swipeTail = () => {
+    let dir = 0;
+    let min = Infinity;
+    let lastT = 0;
+    return {
+      start(direction: number) {
+        dir = direction;
+        min = Infinity;
+        lastT = performance.now();
+      },
+      end() {
+        dir = 0;
+      },
+      /** True while `delta` is still the old swipe or its momentum. */
+      owns(delta: number, now: number) {
+        if (!dir) return false;
+        const quiet = now - lastT > QUIET_MS;
+        lastT = now;
+        const step = Math.abs(delta);
+        if (quiet || (min <= DIP && step >= min * 1.8 + 3)) {
+          dir = 0; // a new swipe
+          return false;
+        }
+        if (Math.sign(delta) !== dir) return false;
+        min = Math.min(min, step);
+        return true;
+      },
+      get active() {
+        return dir !== 0;
+      },
+    };
+  };
   const W = {
     lastT: 0,
     lastScrollT: 0,
@@ -346,7 +386,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     mapping = false;
     W.pulling = 0;
     W.acc = 0;
-    swallowMomentum(); // eat the rest of this scroll's momentum
+    swallowMomentum(-Math.sign(ty)); // eat the rest of this scroll's momentum (it scrolled the other way to the pull)
     clearTimeout(W.endTimer);
     // The pull's speed comes from smoothing, not a hand: only keep what heads home.
     c.close({ vx: -cx * vs, vy: vty - cy * vs, vs }, { towardTargetOnly: true });
@@ -417,30 +457,37 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     }, END_MS);
   };
 
-  // Trackpad: one sideways two-finger swipe turns one page, then waits for the swipe to end.
-  let wAcc = 0;
-  let wLock = 0;
-  let wTimer = 0;
-  const onWheel = (e: WheelEvent) => {
-    if (c.phase() !== "open") return;
-    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
-      onVerticalWheel(e);
-      return;
-    }
+  // Trackpad: a sideways two-finger swipe turns one page. The rest of that swipe,
+  // its momentum included, is ignored, but a new swipe turns the next page right
+  // away, even while the last one's momentum is still arriving (as arrow keys can).
+  // A new swipe is told apart from momentum the same way as for wheel dismiss:
+  // momentum only ever slows, so the speed dipping and picking up again is fingers
+  // back down. A swipe the other way, or after a real pause, is always new.
+  const SWIPE_PX = 40; // sideways travel that turns a page
+  const pageTail = swipeTail();
+  let pageAcc = 0;
+  let pageLastT = 0;
+  const onHorizontalWheel = (e: WheelEvent) => {
     e.preventDefault();
     const now = performance.now();
-    clearTimeout(wTimer);
-    wTimer = window.setTimeout(() => (wAcc = 0), 160);
-    if (now < wLock) {
-      wLock = now + 180;
-      return;
+    const dx = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaMode === 2 ? e.deltaX * c.layout().W : e.deltaX;
+    // macOS can pause ~200 ms between the fingers lifting and momentum starting, so
+    // only a longer quiet spell starts the count again.
+    if (now - pageLastT > QUIET_MS) pageAcc = 0;
+    pageLastT = now;
+    if (!dx || pageTail.owns(dx, now)) return;
+    if (Math.sign(pageAcc) !== Math.sign(dx)) pageAcc = 0;
+    pageAcc += dx;
+    if (Math.abs(pageAcc) > SWIPE_PX) {
+      c.page(Math.sign(dx));
+      pageTail.start(Math.sign(dx));
+      pageAcc = 0;
     }
-    wAcc += e.deltaX;
-    if (Math.abs(wAcc) > 40) {
-      c.page(Math.sign(wAcc));
-      wAcc = 0;
-      wLock = now + 400;
-    }
+  };
+  const onWheel = (e: WheelEvent) => {
+    if (c.phase() !== "open") return;
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) onVerticalWheel(e);
+    else onHorizontalWheel(e);
   };
 
   const onClick = (e: MouseEvent) => {
@@ -491,25 +538,37 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   };
   root.addEventListener("scroll", onScroll, { capture: true, passive: true });
   // After a wheel dismiss, the rest of that scroll's momentum shouldn't scroll the
-  // page behind. Swallow it until the wheel goes quiet (250 ms). The listener is only
-  // attached for that moment: a non-passive wheel listener on the window would
-  // otherwise make the browser run JavaScript before every page scroll.
+  // page behind, so it's swallowed, but only the momentum: a new scroll (or one the
+  // other way) goes through straight away, and the swallowing ends with it. The
+  // listener is only attached for that moment: a non-passive wheel listener on the
+  // window would otherwise make the browser run JavaScript before every page scroll.
+  const MAX_SWALLOW_MS = 2000; // momentum is long over by then, whatever it looks like
+  const closeTail = swipeTail();
   let swallowTimer = 0;
+  let quietTimer = 0;
+  // Quiet for QUIET_MS means the momentum is over: whatever comes next is a new scroll.
+  const stopWhenQuiet = () => {
+    clearTimeout(quietTimer);
+    quietTimer = window.setTimeout(stopSwallowing, QUIET_MS);
+  };
   const stopSwallowing = () => {
     clearTimeout(swallowTimer);
+    clearTimeout(quietTimer);
+    closeTail.end();
     window.removeEventListener("wheel", onWindowWheel, { capture: true });
   };
-  const keepSwallowing = () => {
-    clearTimeout(swallowTimer);
-    swallowTimer = window.setTimeout(stopSwallowing, 250);
-  };
-  function swallowMomentum() {
+  function swallowMomentum(direction: number) {
+    closeTail.start(direction);
     window.addEventListener("wheel", onWindowWheel, { passive: false, capture: true });
-    keepSwallowing();
+    clearTimeout(swallowTimer);
+    swallowTimer = window.setTimeout(stopSwallowing, MAX_SWALLOW_MS);
+    stopWhenQuiet();
   }
   function onWindowWheel(e: WheelEvent) {
-    e.preventDefault();
-    keepSwallowing();
+    if (closeTail.owns(wheelDelta(e), performance.now())) {
+      e.preventDefault();
+      stopWhenQuiet();
+    } else if (!closeTail.active) stopSwallowing();
   }
   root.addEventListener("click", onClick, true);
 
@@ -527,7 +586,6 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     clearTimeout(W.endTimer);
     pull.stop();
     root.removeEventListener("click", onClick, true);
-    clearTimeout(wTimer);
   };
   return { detach, refresh: showZones };
 }
