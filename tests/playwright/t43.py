@@ -1,4 +1,7 @@
-import asyncio
+import asyncio, os
+DEMO = os.environ.get('ZOOM_DEMO_URL', 'http://localhost:8765/dist/')
+SCAN = os.environ.get('ZOOM_SCAN_URL', 'http://localhost:8765/test/scan.html')
+CHROMIUM = os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None
 from playwright.async_api import async_playwright
 ST = "() => ({phase: document.querySelector('.zoom-root').dataset.phase || 'idle', top: Math.round(document.querySelector('.zoom-card:not([inert]) .zoom-card-scroll')?.scrollTop ?? -1)})"
 async def touch_drag(cdp, x, y0, y1, steps=12, dt=16, pg=None):
@@ -10,11 +13,11 @@ async def touch_drag(cdp, x, y0, y1, steps=12, dt=16, pg=None):
     await cdp.send('Input.dispatchTouchEvent', {'type':'touchEnd','touchPoints':[]})
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        b = await p.chromium.launch(executable_path=CHROMIUM)
         ctx = await b.new_context(viewport={'width':430,'height':900}, has_touch=True, is_mobile=True)
         pg = await ctx.new_page(); cdp = await ctx.new_cdp_session(pg)
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto('http://localhost:8765/book-store-zoom.html'); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800)
         s = lambda: pg.evaluate(ST)
         async def openbook():
             await pg.tap('.book >> nth=1'); await pg.wait_for_timeout(1200)

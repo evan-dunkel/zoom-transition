@@ -1,4 +1,7 @@
-import asyncio
+import asyncio, os
+DEMO = os.environ.get('ZOOM_DEMO_URL', 'http://localhost:8765/dist/')
+SCAN = os.environ.get('ZOOM_SCAN_URL', 'http://localhost:8765/test/scan.html')
+CHROMIUM = os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None
 from playwright.async_api import async_playwright
 TRK = """(id) => { window.__c=[]; const src=document.querySelector('.book[aria-label^="Field Notes"] .cover-wrap'); const f=()=>{ const c=document.querySelector('.zoom-clone[data-zoom-id="'+id+'"]');
   const hidden = src.hasAttribute('data-zoom-hidden');
@@ -7,10 +10,10 @@ TRK = """(id) => { window.__c=[]; const src=document.querySelector('.book[aria-l
   if (window.__c.length<600) requestAnimationFrame(f)}; f(); }"""
 async def main():
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        b = await p.chromium.launch(executable_path=CHROMIUM)
         pg = await b.new_page(viewport={'width':430,'height':900})
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto('http://localhost:8765/book-store-zoom.html'); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800)
         await pg.click('.book >> nth=2'); await pg.wait_for_timeout(1200)
         await pg.click('.slowmo', force=True) if False else None
         await pg.evaluate(TRK, 'field-notes-on-leaving')
