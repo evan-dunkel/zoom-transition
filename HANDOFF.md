@@ -17,7 +17,7 @@ API guide; this file is the "how it works, why, and what's left" companion.
   from the source; the cover flies on its own path; neighbours zoom with the
   pager; closing sends every card back to its own slot.
 - The live demo is the "Book Store" (`demo/`), published as a claude.ai artifact.
-  It is a single page; the phone frame is the `container`.
+  It is a single page that fills the window; `.phone` (no longer drawn as a phone) is the `container`.
 
 ## 2. Repository layout
 
@@ -231,7 +231,7 @@ paging jumps; the group is hidden only once the fade-in completes.
   0.15; close 1.75× faster (≈0.29 s) / bounce 0.15; landing `{0.86, 0.1}`;
   edge zone 32 px. Tuning panel persists in localStorage key
   `bookzoom-timing-v3` (bump the key when defaults change).
-- "Book in flight" modes: **own timing** (events + `useZoomValue`; only the
+- "Book in flight" modes (default **synced**): **own timing** (events + `useZoomValue`; only the
   active book opens; activated/deactivated open/close; closing finishes in 0.2 s,
   before landing), **synced** (`angle = -105 * clamp(progress) * clamp(focus)`),
   **static** (`ZoomHero live={false}`).

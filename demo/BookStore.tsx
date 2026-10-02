@@ -236,7 +236,7 @@ export function BookStore() {
   const phoneRef = useRef<HTMLDivElement>(null);
   const storeRef = useRef<HTMLElement>(null);
   const [slow, setSlow] = useState(false);
-  const [heroMode, setHeroMode] = useState<HeroMode>("own");
+  const [heroMode, setHeroMode] = useState<HeroMode>("synced");
   const [historyMode, setHistoryMode] = useState<"session" | "item" | "off">("session");
   const [showZones, setShowZones] = useState(true);
   // Which edges can close a card, per gesture (all on by default).
@@ -297,7 +297,7 @@ export function BookStore() {
           getLabel={(id) => BOOKS.get(id)?.t ?? id}
           timing={timing}
           timeScale={slow ? 0.2 : 1}
-          geometry={() => (compact() ? { top: 8, bottom: 8, side: 18, gap: 8 } : { top: 52, bottom: 14, side: 18, gap: 8 })}
+          geometry={() => (compact() ? { top: 8, bottom: 8, side: 18, gap: 8 } : { top: 24, bottom: 24, side: 18, gap: 8 })}
           dim={() => parseFloat(getComputedStyle(phoneRef.current!).getPropertyValue("--dim-max")) || 0.3}
         >
           <main className="store" ref={storeRef}>
@@ -325,8 +325,8 @@ export function BookStore() {
               <label>
                 Book in flight
                 <select value={heroMode} onChange={(e) => setHeroMode(e.target.value as HeroMode)}>
-                  <option value="own">Own timing</option>
                   <option value="synced">Synced to flight</option>
+                  <option value="own">Own timing</option>
                   <option value="static">Static</option>
                 </select>
               </label>
