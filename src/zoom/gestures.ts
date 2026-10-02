@@ -5,6 +5,23 @@ export type GestureLayout = { W: number; H: number; side: number; step: number; 
 
 export type ZoomVelocity = { vx: number; vy: number; vs: number };
 
+/** Which edges of the card a gesture may close it from. */
+export type DismissEdges = { top: boolean; bottom: boolean };
+
+/** The provider's dismiss options, with every edge setting resolved. */
+export type GestureDismiss = {
+  distance: number;
+  velocity: number;
+  minDistance: number;
+  pivotY: number;
+  maxShrink: number;
+  dimFade: number;
+  drag: DismissEdges;
+  wheel: DismissEdges;
+  wheelDistance: number;
+  wheelEdgeSlop: number;
+};
+
 export type GestureController = {
   phase(): "idle" | "opening" | "open" | "closing";
   count(): number;
@@ -12,19 +29,11 @@ export type GestureController = {
   layout(): GestureLayout;
   activeCard(): HTMLElement | null;
   activeScroller(): HTMLElement | null;
-  dismiss(): {
-    distance: number;
-    velocity: number;
-    minDistance: number;
-    pivotY: number;
-    maxShrink: number;
-    wheel: "top" | "bottom" | "both" | false;
-    wheelDistance: number;
-    wheelEdgeSlop: number;
-    drag: "top" | "bottom" | "both" | false;
-  };
+  dismiss(): GestureDismiss;
   /** Playback speed, so wheel smoothing follows slow motion too. */
   speed(): number;
+  /** Whether the debug edge zones are drawn (their state is only tracked then). */
+  debug(): boolean;
   trackX: MotionValue<number>;
   zx: MotionValue<number>;
   zy: MotionValue<number>;
@@ -92,8 +101,6 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     const p = c.dismiss().pivotY;
     return { cx: L.W / 2, cy: L.top + L.cardH * (dir < 0 ? 1 - p : p) };
   };
-  const edgeAllowed = (which: "top" | "bottom", option: "top" | "bottom" | "both" | false) =>
-    option === "both" || option === which;
 
   /** Returns true when the gesture is ours, so touch can preventDefault. */
   const move = (x: number, y: number, t: number) => {
@@ -105,15 +112,14 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       if (c.phase() !== "open") return false;
       if (Math.hypot(dx, dy) < (G.type === "touch" ? 3 : 5)) return false;
       const scroller = c.activeScroller();
+      const drag = c.dismiss().drag;
       if (Math.abs(dx) > Math.abs(dy) * 0.9) {
         G.axis = "x";
         G.startTrack = c.trackX.get();
         c.trackX.jump(G.startTrack); // grab a settling page where it is
       } else if (
-        (dy > 0 && (!scroller || scroller.scrollTop <= 0) && edgeAllowed("top", c.dismiss().drag)) ||
-        (dy < 0 &&
-          (!scroller || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1) &&
-          edgeAllowed("bottom", c.dismiss().drag))
+        (dy > 0 && drag.top && (!scroller || scroller.scrollTop <= 0)) ||
+        (dy < 0 && drag.bottom && (!scroller || scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1))
       ) {
         // At the top pulling down, or at the bottom pulling up: a dismiss drag.
         G.axis = "y";
@@ -210,14 +216,29 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   const onTouchEnd = (e: TouchEvent) => {
     if (G.type === "touch") end(e.timeStamp);
   };
+  // A mouse drag is followed on the window (it may leave the card), but only while
+  // one is in progress, so ordinary mouse movement on the page costs nothing.
+  const followPointer = (on: boolean) => {
+    if (on) {
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerUp);
+    } else {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    }
+  };
   const onPointerDown = (e: PointerEvent) => {
     if (e.pointerType === "touch" || e.button !== 0) return;
     start(e.clientX, e.clientY, e.timeStamp, "mouse");
+    if (G.on) followPointer(true);
   };
   const onPointerMove = (e: PointerEvent) => {
     if (G.on && G.type === "mouse") move(e.clientX, e.clientY, e.timeStamp);
   };
   const onPointerUp = (e: PointerEvent) => {
+    followPointer(false);
     if (G.on && G.type === "mouse") end(e.timeStamp);
   };
 
@@ -225,19 +246,21 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
 
   // Reflect the wheel-dismiss state on the root as data attributes, so the debug
   // edge zones can show when the content is within the zone and when a swipe is armed.
+  // Skipped entirely unless debug is on: it reads layout on every scroll.
   const flag = (name: string, on: boolean) => {
     if (on) {
       if (!(name in root.dataset)) root.dataset[name] = "";
     } else if (name in root.dataset) delete root.dataset[name];
   };
   const showZones = () => {
-    const sc = c.activeScroller();
-    const slop = c.dismiss().wheelEdgeSlop;
-    flag("zoneTop", !!sc && sc.scrollTop <= slop);
-    flag("zoneBottom", !!sc && sc.scrollHeight - sc.clientHeight - sc.scrollTop <= slop);
+    const sc = c.debug() ? c.activeScroller() : null;
+    const { wheel, wheelEdgeSlop: slop } = c.dismiss();
+    flag("zoneTop", !!sc && wheel.top && sc.scrollTop <= slop);
+    flag("zoneBottom", !!sc && wheel.bottom && sc.scrollHeight - sc.clientHeight - sc.scrollTop <= slop);
   };
   let armedTimer = 0;
   const showArmed = () => {
+    if (!c.debug()) return;
     flag("armedTop", W.armedTop);
     flag("armedBottom", W.armedBottom);
     clearTimeout(armedTimer);
@@ -280,7 +303,6 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     pulling: 0 as 0 | 1 | -1, // 1: pulling down from the top, -1: pulling up from the bottom
     acc: 0,
     endTimer: 0,
-    swallowUntil: 0,
   };
   const pull = motionValue(0); // the card's offset, smoothed so wheel notches glide
   let mapping = false;
@@ -324,7 +346,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     mapping = false;
     W.pulling = 0;
     W.acc = 0;
-    W.swallowUntil = performance.now() + 250; // eat the rest of this scroll's momentum
+    swallowMomentum(); // eat the rest of this scroll's momentum
     clearTimeout(W.endTimer);
     // The pull's speed comes from smoothing, not a hand: only keep what heads home.
     c.close({ vx: -cx * vs, vy: vty - cy * vs, vs }, { towardTargetOnly: true });
@@ -333,8 +355,9 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
 
   const onVerticalWheel = (e: WheelEvent) => {
     const d = c.dismiss();
+    if (!d.wheel.top && !d.wheel.bottom) return;
     const scroller = c.activeScroller();
-    if (!d.wheel || !scroller) return;
+    if (!scroller) return;
     const now = performance.now();
     const fromTopEdge = scroller.scrollTop;
     const fromBottomEdge = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
@@ -349,10 +372,10 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       // After a real pause: arm an edge if the content is resting at or near it.
       const settled = now - W.lastScrollT > QUIET_MS;
       const slop = d.wheelEdgeSlop;
-      W.armedTop = settled && fromTopEdge <= slop;
-      W.armedBottom = settled && fromBottomEdge <= slop;
+      W.armedTop = d.wheel.top && settled && fromTopEdge <= slop;
+      W.armedBottom = d.wheel.bottom && settled && fromBottomEdge <= slop;
       W.minAtEdge = Infinity;
-    } else if (atEdgeThisWay && still && !(dy < 0 ? W.armedTop : W.armedBottom)) {
+    } else if (atEdgeThisWay && still && (dy < 0 ? d.wheel.top && !W.armedTop : d.wheel.bottom && !W.armedBottom)) {
       // A quick second swipe, already at the edge.
       const fingersBack = W.minAtEdge <= DIP && step >= W.minAtEdge * 1.8 + 3;
       const wheelAgain = gap >= MOUSE_GAP_MS && step >= 40 && step === W.prevAbs;
@@ -366,8 +389,8 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     W.lastT = now;
     showArmed();
     if (!W.pulling) {
-      const fromTop = dy < 0 && atTop && W.armedTop && (d.wheel === "top" || d.wheel === "both");
-      const fromBottom = dy > 0 && atBottom && W.armedBottom && (d.wheel === "bottom" || d.wheel === "both");
+      const fromTop = dy < 0 && atTop && W.armedTop && d.wheel.top;
+      const fromBottom = dy > 0 && atBottom && W.armedBottom && d.wheel.bottom;
       if (!fromTop && !fromBottom) return; // ordinary scrolling inside the card
       W.pulling = fromTop ? 1 : -1;
       // If the card is still springing back from a pull a moment ago, carry on
@@ -460,9 +483,6 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   root.addEventListener("touchend", onTouchEnd);
   root.addEventListener("touchcancel", onTouchEnd);
   root.addEventListener("pointerdown", onPointerDown);
-  window.addEventListener("pointermove", onPointerMove);
-  window.addEventListener("pointerup", onPointerUp);
-  window.addEventListener("pointercancel", onPointerUp);
   root.addEventListener("wheel", onWheel, { passive: false });
   // Track when card content last moved (scroll events don't bubble, but capture sees them).
   const onScroll = () => {
@@ -471,15 +491,26 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   };
   root.addEventListener("scroll", onScroll, { capture: true, passive: true });
   // After a wheel dismiss, the rest of that scroll's momentum shouldn't scroll the
-  // page behind. Swallow it until the wheel goes quiet.
-  const onWindowWheel = (e: WheelEvent) => {
-    const now = performance.now();
-    if (now < W.swallowUntil) {
-      e.preventDefault();
-      W.swallowUntil = now + 250;
-    }
+  // page behind. Swallow it until the wheel goes quiet (250 ms). The listener is only
+  // attached for that moment: a non-passive wheel listener on the window would
+  // otherwise make the browser run JavaScript before every page scroll.
+  let swallowTimer = 0;
+  const stopSwallowing = () => {
+    clearTimeout(swallowTimer);
+    window.removeEventListener("wheel", onWindowWheel, { capture: true });
   };
-  window.addEventListener("wheel", onWindowWheel, { passive: false, capture: true });
+  const keepSwallowing = () => {
+    clearTimeout(swallowTimer);
+    swallowTimer = window.setTimeout(stopSwallowing, 250);
+  };
+  function swallowMomentum() {
+    window.addEventListener("wheel", onWindowWheel, { passive: false, capture: true });
+    keepSwallowing();
+  }
+  function onWindowWheel(e: WheelEvent) {
+    e.preventDefault();
+    keepSwallowing();
+  }
   root.addEventListener("click", onClick, true);
 
   const detach = () => {
@@ -489,11 +520,9 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     root.removeEventListener("touchend", onTouchEnd);
     root.removeEventListener("touchcancel", onTouchEnd);
     root.removeEventListener("pointerdown", onPointerDown);
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-    window.removeEventListener("pointercancel", onPointerUp);
+    followPointer(false);
     root.removeEventListener("wheel", onWheel);
-    window.removeEventListener("wheel", onWindowWheel, { capture: true });
+    stopSwallowing();
     root.removeEventListener("scroll", onScroll, { capture: true });
     clearTimeout(W.endTimer);
     pull.stop();

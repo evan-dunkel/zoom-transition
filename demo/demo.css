@@ -192,3 +192,5 @@ button { font: inherit; color: inherit; }
 .tune select { height: 32px; padding: 0 8px; border: 1px solid var(--sep); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
 .tune .check { gap: 8px; }
 .tune .check input { width: auto; height: auto; accent-color: var(--accent); }
+.tune .edges { display: inline-flex; align-items: center; gap: 6px 12px; margin: 0; padding: 0; border: 0; }
+.tune .edges legend { float: left; margin-right: 4px; padding: 0; color: var(--text2); }

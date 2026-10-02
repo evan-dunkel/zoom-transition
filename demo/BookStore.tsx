@@ -108,7 +108,7 @@ function BookOwnTiming({ b }: { b: Book }) {
   return <Book3D b={b} angle={angle} />;
 }
 
-/* ------------------------------------------------------------------ store (sources) *//* ------------------------------------------------------------------ store (sources) */
+/* ------------------------------------------------------------------ store (sources) */
 
 function Shelf({ title, books }: { title: string; books: Book[] }) {
   const { open } = useZoom();
@@ -239,6 +239,9 @@ export function BookStore() {
   const [heroMode, setHeroMode] = useState<HeroMode>("own");
   const [historyMode, setHistoryMode] = useState<"session" | "item" | "off">("session");
   const [showZones, setShowZones] = useState(true);
+  // Which edges can close a card, per gesture (all on by default).
+  const [edges, setEdges] = useState({ scrollTop: true, scrollBottom: true, dragTop: true, dragBottom: true });
+  const toggleEdge = (key: keyof typeof edges) => setEdges((e) => ({ ...e, [key]: !e[key] }));
   const [fields, setFields] = useState(() => {
     const t = loadTuning();
     return { open: String(t.open), openBounce: String(t.openBounce), ratio: String(t.ratio), bounce: String(t.bounce), slop: String(t.slop) };
@@ -285,7 +288,11 @@ export function BookStore() {
           renderDestination={(id) => <BookDetail b={BOOKS.get(id)!} heroMode={heroMode} />}
           landing={{ widthRatio: 0.86, topOffset: 0.1 }}
           history={historyMode === "off" ? false : { mode: historyMode }}
-          dismiss={{ wheelEdgeSlop: tuning.slop }}
+          dismiss={{
+            wheelEdgeSlop: tuning.slop,
+            wheel: { top: edges.scrollTop, bottom: edges.scrollBottom },
+            drag: { top: edges.dragTop, bottom: edges.dragBottom },
+          }}
           debug={showZones}
           getLabel={(id) => BOOKS.get(id)?.t ?? id}
           timing={timing}
@@ -329,6 +336,24 @@ export function BookStore() {
               <label className="check">
                 <input type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} /> Show edge zones
               </label>
+              <fieldset className="edges">
+                <legend>Scroll past an edge to close</legend>
+                <label className="check">
+                  <input type="checkbox" name="scroll-top" checked={edges.scrollTop} onChange={() => toggleEdge("scrollTop")} /> Top
+                </label>
+                <label className="check">
+                  <input type="checkbox" name="scroll-bottom" checked={edges.scrollBottom} onChange={() => toggleEdge("scrollBottom")} /> Bottom
+                </label>
+              </fieldset>
+              <fieldset className="edges">
+                <legend>Drag from an edge to close</legend>
+                <label className="check">
+                  <input type="checkbox" name="drag-top" checked={edges.dragTop} onChange={() => toggleEdge("dragTop")} /> Top
+                </label>
+                <label className="check">
+                  <input type="checkbox" name="drag-bottom" checked={edges.dragBottom} onChange={() => toggleEdge("dragBottom")} /> Bottom
+                </label>
+              </fieldset>
               <label>
                 History
                 <select value={historyMode} onChange={(e) => setHistoryMode(e.target.value as "session" | "item" | "off")}>
