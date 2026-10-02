@@ -56,9 +56,14 @@ export async function mouseDrag(page: Page, x: number, y0: number, y1: number, s
   await page.mouse.up();
 }
 
+type Edge = "scroll-top" | "scroll-bottom" | "drag-top" | "drag-bottom";
 /** Untick one of the demo's "close from this edge" checkboxes. */
-export async function disableEdge(page: Page, name: "scroll-top" | "scroll-bottom" | "drag-top" | "drag-bottom") {
+export async function disableEdge(page: Page, name: Edge) {
   await page.locator(`input[name="${name}"]`).uncheck();
+}
+/** Tick one (the bottom edges are off by default). */
+export async function enableEdge(page: Page, name: Edge) {
+  await page.locator(`input[name="${name}"]`).check();
 }
 
 /** Still open after a gesture: give a close a moment to start, then check. */

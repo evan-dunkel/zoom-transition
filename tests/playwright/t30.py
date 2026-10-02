@@ -17,7 +17,7 @@ async def main():
         b = await p.chromium.launch(executable_path=CHROMIUM)
         pg = await b.new_page(viewport={'width':430,'height':900})
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto(DEMO); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800); await pg.check('input[name=scroll-bottom]')  # bottom edges are off by default
         await pg.click('.book >> nth=1'); await pg.wait_for_timeout(1000); await pg.mouse.move(215, 500)
         swipe = [3,8,16,28,40,45,45,40]                     # fingers
         momentum = [38,32,27,22,18,15,12,10,8,6,5,4,3,2,2,1,1]  # decays after lift

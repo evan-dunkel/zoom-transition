@@ -42,7 +42,7 @@ export type ZoomLanding = {
 /**
  * Which edges of a card a gesture can close it from. true or "both": top and bottom;
  * false: neither; "top" / "bottom": only that one. As an object, an edge left out
- * stays on, so { bottom: false } keeps the top and turns the bottom off.
+ * keeps its default (top on, bottom off), so { bottom: true } turns on both.
  */
 export type ZoomEdges = boolean | "top" | "bottom" | "both" | { top?: boolean; bottom?: boolean };
 
@@ -62,12 +62,12 @@ export type ZoomDismiss = {
   dimFade: number;
   /**
    * Close by dragging (touch, or a mouse drag) down from the card's top or up from its
-   * bottom. Default: both edges. Turn one edge off with { top: false } or { bottom: false }.
+   * bottom. Default: top only. Add the bottom with { bottom: true }.
    */
   drag: ZoomEdges;
   /**
    * Close by scrolling (mouse wheel or trackpad) past the card's top or bottom.
-   * Default: both edges. Turn one edge off with { top: false } or { bottom: false }.
+   * Default: top only. Add the bottom with { bottom: true }.
    */
   wheel: ZoomEdges;
   /** How far (in px of scrolling) past the edge closes the card. */
@@ -76,13 +76,19 @@ export type ZoomDismiss = {
   wheelEdgeSlop: number;
 };
 
+/** Edges a gesture closes from unless told otherwise: pulling down from the top only.
+ *  Pulling up from the bottom is off: it's easy to do by accident at the end of a
+ *  long read, and on phones it competes with the home indicator. */
+const DEFAULT_EDGES: DismissEdges = { top: true, bottom: false };
+
 /** Normalises every way of writing ZoomEdges to one flag per edge. */
 const resolveEdges = (e: ZoomEdges | undefined): DismissEdges => {
-  if (e === undefined || e === true || e === "both") return { top: true, bottom: true };
+  if (e === undefined) return DEFAULT_EDGES;
+  if (e === true || e === "both") return { top: true, bottom: true };
   if (e === false) return { top: false, bottom: false };
   if (e === "top") return { top: true, bottom: false };
   if (e === "bottom") return { top: false, bottom: true };
-  return { top: e.top ?? true, bottom: e.bottom ?? true };
+  return { top: e.top ?? DEFAULT_EDGES.top, bottom: e.bottom ?? DEFAULT_EDGES.bottom };
 };
 
 const defaultLanding: ZoomLanding = { widthRatio: 1, topOffset: 0 };
@@ -93,8 +99,8 @@ const defaultDismiss: ZoomDismiss = {
   pivotY: 0.3,
   maxShrink: 0.4,
   dimFade: 0.65,
-  drag: "both",
-  wheel: "both",
+  drag: DEFAULT_EDGES,
+  wheel: DEFAULT_EDGES,
   wheelDistance: 240,
   wheelEdgeSlop: 32,
 };

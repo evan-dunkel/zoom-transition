@@ -239,8 +239,8 @@ export function BookStore() {
   const [heroMode, setHeroMode] = useState<HeroMode>("synced");
   const [historyMode, setHistoryMode] = useState<"session" | "item" | "off">("session");
   const [showZones, setShowZones] = useState(true);
-  // Which edges can close a card, per gesture (all on by default).
-  const [edges, setEdges] = useState({ scrollTop: true, scrollBottom: true, dragTop: true, dragBottom: true });
+  // Which edges can close a card, per gesture (the library's defaults: top only).
+  const [edges, setEdges] = useState({ scrollTop: true, scrollBottom: false, dragTop: true, dragBottom: false });
   const toggleEdge = (key: keyof typeof edges) => setEdges((e) => ({ ...e, [key]: !e[key] }));
   const [fields, setFields] = useState(() => {
     const t = loadTuning();

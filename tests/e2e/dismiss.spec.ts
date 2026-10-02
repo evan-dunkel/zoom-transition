@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   disableEdge,
+  enableEdge,
   expectCloses,
   expectStaysOpen,
   mouseDrag,
@@ -26,7 +27,15 @@ test.describe("scroll (wheel / trackpad) dismissal", () => {
     await expectCloses(page);
   });
 
-  test("closes past the bottom by default", async ({ page }) => {
+  test("doesn't close past the bottom by default", async ({ page }) => {
+    await openBook(page);
+    await scrollCardTo(page, "bottom");
+    await wheelSwipe(page, 60);
+    await expectStaysOpen(page);
+  });
+
+  test("bottom edge can be turned on", async ({ page }) => {
+    await enableEdge(page, "scroll-bottom");
     await openBook(page);
     await scrollCardTo(page, "bottom");
     await wheelSwipe(page, 60);
@@ -34,6 +43,7 @@ test.describe("scroll (wheel / trackpad) dismissal", () => {
   });
 
   test("top edge can be turned off on its own", async ({ page }) => {
+    await enableEdge(page, "scroll-bottom");
     await disableEdge(page, "scroll-top");
     await openBook(page);
     await scrollCardTo(page, "top");
@@ -45,27 +55,20 @@ test.describe("scroll (wheel / trackpad) dismissal", () => {
     await expectCloses(page);
   });
 
-  test("bottom edge can be turned off on its own", async ({ page }) => {
-    await disableEdge(page, "scroll-bottom");
-    await openBook(page);
-    await scrollCardTo(page, "bottom");
-    await wheelSwipe(page, 60);
-    await expectStaysOpen(page);
-    await scrollCardTo(page, "top");
-    await wheelSwipe(page, -60);
-    await expectCloses(page);
-  });
-
   test("debug edge zones are drawn only for enabled edges", async ({ page }) => {
-    await openBook(page);
     const card = page.locator(".zoom-card:not([inert])");
-    await expect(card.locator(".zoom-debug-top")).toHaveCount(1);
-    await expect(card.locator(".zoom-debug-bottom")).toHaveCount(1);
-    await page.keyboard.press("Escape");
-    await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>(".zoom-root")?.dataset.phase)).toBe("idle");
-
-    await disableEdge(page, "scroll-top");
+    const reopenWith = async (change: () => Promise<void>) => {
+      await page.keyboard.press("Escape");
+      await expect.poll(() => phase(page)).toBe("idle");
+      await change();
+      await openBook(page);
+    };
     await openBook(page);
+    await expect(card.locator(".zoom-debug-top")).toHaveCount(1);
+    await expect(card.locator(".zoom-debug-bottom")).toHaveCount(0);
+    await reopenWith(() => enableEdge(page, "scroll-bottom"));
+    await expect(card.locator(".zoom-debug-bottom")).toHaveCount(1);
+    await reopenWith(() => disableEdge(page, "scroll-top"));
     await expect(card.locator(".zoom-debug-top")).toHaveCount(0);
     await expect(card.locator(".zoom-debug-bottom")).toHaveCount(1);
   });
@@ -80,7 +83,15 @@ test.describe("touch drag dismissal", () => {
     await expectCloses(page);
   });
 
-  test("closes pulling up from the bottom by default", async ({ page }) => {
+  test("doesn't close pulling up from the bottom by default", async ({ page }) => {
+    await openBook(page);
+    await scrollCardTo(page, "bottom");
+    await touchDrag(page, 215, 650, 380);
+    await expectStaysOpen(page);
+  });
+
+  test("bottom edge can be turned on", async ({ page }) => {
+    await enableEdge(page, "drag-bottom");
     await openBook(page);
     await scrollCardTo(page, "bottom");
     await touchDrag(page, 215, 650, 380);
@@ -88,23 +99,13 @@ test.describe("touch drag dismissal", () => {
   });
 
   test("top edge can be turned off on its own", async ({ page }) => {
+    await enableEdge(page, "drag-bottom");
     await disableEdge(page, "drag-top");
     await openBook(page);
     await touchDrag(page, 215, 300, 560);
     await expectStaysOpen(page);
     await scrollCardTo(page, "bottom");
     await touchDrag(page, 215, 650, 380);
-    await expectCloses(page);
-  });
-
-  test("bottom edge can be turned off on its own", async ({ page }) => {
-    await disableEdge(page, "drag-bottom");
-    await openBook(page);
-    await scrollCardTo(page, "bottom");
-    await touchDrag(page, 215, 650, 380);
-    await expectStaysOpen(page);
-    await scrollCardTo(page, "top");
-    await touchDrag(page, 215, 300, 560);
     await expectCloses(page);
   });
 });
@@ -139,6 +140,7 @@ test.describe("after a wheel dismiss", () => {
   };
 
   test("the swipe's momentum doesn't scroll the page behind", async ({ page }) => {
+    await enableEdge(page, "scroll-bottom");
     await openBook(page);
     await scrollCardTo(page, "bottom");
     await wheelSwipe(page, 60); // closes past the bottom
@@ -148,6 +150,7 @@ test.describe("after a wheel dismiss", () => {
   });
 
   test("a new scroll right away scrolls the page, without moving the pointer", async ({ page }) => {
+    await enableEdge(page, "scroll-bottom");
     await openBook(page);
     await scrollCardTo(page, "bottom");
     await wheelSwipe(page, 60);

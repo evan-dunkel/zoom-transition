@@ -186,10 +186,12 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
 ### Gestures (`gestures.ts`)
 - Touch uses touch events (decide axis on first move so native scroll and
   dismiss can coexist); mouse uses pointer events. Motion's drag can't do this.
-- Drag dismiss from **top (pull down) and bottom (pull up)** (`dismiss.drag`),
+- Drag dismiss from **top (pull down) and, when enabled, bottom (pull up)** (`dismiss.drag`),
   only if the drag starts at that edge. Pivot mirrors for bottom pulls.
 - Per-edge options: `dismiss.drag` and `dismiss.wheel` take `ZoomEdges` (`true`/`false`,
-  `"top"`/`"bottom"`/`"both"`, or `{ top?, bottom? }` where a missing edge stays on).
+  `"top"`/`"bottom"`/`"both"`, or `{ top?, bottom? }` where a missing edge keeps its
+  default). **Default is top only** (`DEFAULT_EDGES`) for both: bottom pulls are easy
+  to trigger at the end of a long read and compete with the iPhone home indicator.
   The provider resolves them once per `dismiss` prop (`resolveEdges`, cached by
   identity) to `{ top, bottom }`; gestures only ever see that form. A disabled edge
   never arms or pulls; the gesture is left to native scrolling.

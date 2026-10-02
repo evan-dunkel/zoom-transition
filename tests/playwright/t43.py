@@ -17,7 +17,7 @@ async def main():
         ctx = await b.new_context(viewport={'width':430,'height':900}, has_touch=True, is_mobile=True)
         pg = await ctx.new_page(); cdp = await ctx.new_cdp_session(pg)
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
-        await pg.goto(DEMO); await pg.wait_for_timeout(800)
+        await pg.goto(DEMO); await pg.wait_for_timeout(800); await pg.check('input[name=drag-bottom]')  # bottom edges are off by default
         s = lambda: pg.evaluate(ST)
         async def openbook():
             await pg.tap('.book >> nth=1'); await pg.wait_for_timeout(1200)

@@ -128,17 +128,19 @@ React island, or keep the markup in Astro and use one small island with `scan`
   - `drag` — dragging with a finger (or the mouse): pull down from the top, or up from the bottom.
   - `wheel` — scrolling with a mouse wheel or trackpad past the top or bottom.
 
-  Both edges are on by default. Each edge can be switched off on its own; an edge you
-  leave out stays on:
+  By default only the top edge closes, for both gestures. Pulling up from the bottom
+  is off: it's easy to do by accident at the end of a long read, and on phones it
+  competes with the home indicator. Each edge can be switched on or off on its own;
+  an edge you leave out keeps its default:
 
   ```tsx
   dismiss={{
-    wheel: { bottom: false }, // scrolling closes only past the top
-    drag: { top: false },     // dragging closes only from the bottom
+    wheel: { bottom: true }, // scrolling closes past the top or the bottom
+    drag: { top: false },    // dragging never closes
   }}
   ```
 
-  `false` turns a gesture off at both edges; `"top"`, `"bottom"` and `"both"` also work.
+  `true`/`false` turn a gesture on or off at both edges; `"top"`, `"bottom"` and `"both"` also work.
   When an edge is off, that gesture just scrolls the card (with the browser's own bounce).
   `wheelDistance` sets how far past the edge you scroll to close (px, default 240).
   A swipe that runs into an edge never closes the card; a second swipe made at the
