@@ -11,6 +11,7 @@ export {
   type ZoomLanding,
   type ZoomDismiss,
   type ZoomEdges,
+  type ZoomPaging,
   type ZoomPhase,
 } from "./ZoomProvider";
 export { ZoomSource, type ZoomSourceProps } from "./ZoomSource";

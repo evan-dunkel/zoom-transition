@@ -220,7 +220,14 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   the card's content is at that edge (else native scroll). Wheel: vertical swipes
   page once the content is at an edge, armed exactly like wheel dismiss
   (`armEdges`, shared), and a page turn's momentum is swallowed (`pageTail`) so it
-  can't scroll the new card; sideways swipes pull the card (same `pull` spring and
+  can't scroll the new card. `paging.atEdge: "continue"` skips the arming (reaching the
+  edge pages at once); `paging.swipeDistance` replaces the old fixed 40 px. Scrolling
+  off the visible card (the inert card being left mid page turn, a gap, the backdrop)
+  scrolls the visible card by hand (`offCard`): inert cards aren't hit-testable, so
+  native scrolling there did nothing until the new card slid under the pointer, which
+  felt like waiting for the page turn (worst paging up with the pointer low). Touch:
+  a vertical drag that lands off the card gets axis "scroll" and drives `scrollTop`,
+  then glides with UIScrollView deceleration (`glideScroll`). Sideways swipes pull the card (same `pull` spring and
   `pullBy`/`commitWheelDismiss`, mapped to x). Edge settings collapse to on/off
   (`sidewaysOn`). Debug edge zones aren't drawn.
 - `swipeTail()` follows a swipe that has already acted (turned a page, closed the
@@ -288,7 +295,8 @@ paging jumps; the group is hidden only once the fade-in completes.
   read that scrolls; the end names the next piece ("Keep scrolling"), or offers a
   way back on the last. Imagery is generated with CSS (`Art`, kinds like phones,
   bars, tiles, shelf, spring). Fonts: Bricolage Grotesque (display), Newsreader
-  (reading).
+  (reading). A "Moving between pieces" panel tunes `timing.page` (duration, bounce),
+  `paging.swipeDistance` and `paging.atEdge`, persisted in `portfolio-paging-v1`.
 
 ## 6. Public API (summary)
 `ZoomProvider` props: `renderDestination`, `container`, `background`, `timing`,
@@ -351,6 +359,8 @@ See README for details.
   content scrolling before paging, sideways touch/mouse/wheel close, Escape and X,
   the dimmed group, and only the visible card flying home. `portfolio.spec.ts`: reading
   then paging at the end, item history, separate feeds, the way back from the last piece.
+  `portfolio-paging.spec.ts`: scrolling over the card being left mid page turn (both
+  directions, wheel and touch) scrolls the new card; swipe distance; `atEdge` modes.
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
   the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).

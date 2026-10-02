@@ -350,3 +350,6 @@ button { font: inherit; color: inherit; }
 .art-draft { color: #1c1c1e; }
 .art-draft[style*="#1c1c1e"] { color: #f5f5f7; }
 .pf-section { max-width: 980px; }
+.pf-tune { margin: 16px 20px 0; border: 0; max-width: 940px; }
+.pf-tune legend { float: left; width: 100%; margin-bottom: 2px; padding: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text2); }
+.pf-reset { height: 32px; padding: 0 12px; border: 1px solid var(--sep); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer; }

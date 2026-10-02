@@ -154,7 +154,12 @@ React island, or keep the markup in Astro and use one small island with `scan`
   edge zones (if any of a band is on screen, a swipe toward that edge can close the
   card). They brighten while the content is in the zone and again while a swipe is armed.
   Only edges with wheel dismissal on get a band.
-- `paging` — swipe between a group's items (default true).
+- `paging` — swipe between a group's items (default true). Pass options to tune it:
+  `{ swipeDistance: 40, atEdge: "new-swipe" }`. `swipeDistance` is how far (px) a trackpad
+  or wheel swipe travels before it turns the page. `atEdge` (vertical pager) is what
+  scrolling into the end of a card's content does: `"new-swipe"` stops there and a new
+  swipe turns the page; `"continue"` turns it straight away. How quickly a page turn
+  settles is `timing.page` (default 0.5 s, no bounce).
 - `orientation` — how a group's cards are laid out and swiped through:
   - `"horizontal"` (default): side by side. Swipe sideways to page; pull down to close.
   - `"vertical"`: stacked like a feed, one card per page. Swipe, drag or scroll up and

@@ -22,6 +22,9 @@ export type GestureDismiss = {
   wheelEdgeSlop: number;
 };
 
+/** The provider's paging options, resolved. */
+export type GesturePaging = { swipeDistance: number; atEdge: "new-swipe" | "continue" };
+
 export type GestureController = {
   phase(): "idle" | "opening" | "open" | "closing";
   count(): number;
@@ -30,6 +33,7 @@ export type GestureController = {
   activeCard(): HTMLElement | null;
   activeScroller(): HTMLElement | null;
   dismiss(): GestureDismiss;
+  paging(): GesturePaging;
   /** Playback speed, so wheel smoothing follows slow motion too. */
   speed(): number;
   /** Whether the debug edge zones are drawn (their state is only tracked then). */
@@ -60,8 +64,11 @@ export type GestureController = {
  * Vertical pager: vertical drags at an edge page, sideways drags dismiss.
  */
 export function attachGestures(root: HTMLElement, c: GestureController) {
-  /** "page": moving the track. "dismiss": pulling the card away. "none": left to native scrolling. */
-  type Axis = "page" | "dismiss" | "none" | null;
+  /**
+   * "page": moving the track. "dismiss": pulling the card away. "scroll": scrolling the
+   * visible card for a touch that landed off it (see below). "none": left to native scrolling.
+   */
+  type Axis = "page" | "dismiss" | "scroll" | "none" | null;
   const G = {
     on: false,
     type: "touch" as "touch" | "mouse",
@@ -80,14 +87,48 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     dir: 1 as 1 | -1,
     /** How far the card has been pulled in the dismiss direction. */
     pulled: 0,
+    /** Where the touch landed. */
+    target: null as EventTarget | null,
+    /** "scroll": the visible card's scroll position when the drag began. */
+    scroll0: 0,
   };
   let suppressClickUntil = 0;
 
-  const start = (x: number, y: number, t: number, type: "touch" | "mouse") => {
+  const start = (x: number, y: number, t: number, type: "touch" | "mouse", target: EventTarget | null) => {
     // A touch can begin while the card is still opening; it takes effect once open.
     const phase = c.phase();
     if (phase !== "open" && phase !== "opening") return;
-    Object.assign(G, { on: true, type, x0: x, y0: y, axis: null, samples: [{ t, x, y }], startIndex: c.index(), pulled: 0 });
+    stopGlide();
+    Object.assign(G, { on: true, type, x0: x, y0: y, axis: null, samples: [{ t, x, y }], startIndex: c.index(), pulled: 0, target });
+  };
+  /** True when an event landed somewhere other than the visible card (a neighbour, a gap, the backdrop). */
+  const offCard = (target: EventTarget | null) => {
+    const card = c.activeCard();
+    return !!card && !(target instanceof Node && card.contains(target));
+  };
+
+  // Right after a page turn, the card you left is still partly on screen, and it's
+  // inert, so scrolling over it would do nothing until the new card slid under the
+  // pointer or finger. Scrolling anywhere off the visible card scrolls the visible card.
+  let glide = 0;
+  const stopGlide = () => {
+    cancelAnimationFrame(glide);
+    glide = 0;
+  };
+  /** A touch scroll we drove ourselves carries on with UIScrollView-like deceleration. */
+  const glideScroll = (sc: HTMLElement, pxPerSecond: number) => {
+    stopGlide();
+    let v = pxPerSecond / 1000;
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min(now - last, 32);
+      last = now;
+      const before = sc.scrollTop;
+      sc.scrollTop = before + v * dt;
+      v *= Math.pow(0.998, dt);
+      glide = Math.abs(v) > 0.02 && sc.scrollTop !== before ? requestAnimationFrame(step) : 0;
+    };
+    glide = requestAnimationFrame(step);
   };
   const sample = (t: number, x: number, y: number) => {
     G.samples.push({ t, x, y });
@@ -151,7 +192,10 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
         if (sideways && sidewaysOn(drag)) startDismiss(dx > 0 ? 1 : -1);
         // At the top pulling down, or at the bottom pushing up: the previous or next page.
         else if (!sideways && ((dy > 0 && atTop) || (dy < 0 && atBottom))) startPaging();
-        else {
+        else if (!sideways && G.type === "touch" && scroller && offCard(G.target)) {
+          G.axis = "scroll";
+          G.scroll0 = scroller.scrollTop;
+        } else {
           G.axis = "none";
           return false;
         }
@@ -177,6 +221,11 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       if (v > max) v = max + rubber(v - max, size);
       else if (v < min) v = min - rubber(min - v, size);
       c.track.jump(v);
+      return true;
+    }
+    if (G.axis === "scroll") {
+      const sc = c.activeScroller();
+      if (sc) sc.scrollTop = G.scroll0 - dy;
       return true;
     }
     if (G.axis === "dismiss") {
@@ -207,6 +256,9 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       i = clamp(clamp(i, G.startIndex - 1, G.startIndex + 1), 0, c.count() - 1);
       if (i !== c.index()) c.setIndex(i);
       c.settlePage(i, v);
+    } else if (G.axis === "scroll") {
+      const sc = c.activeScroller();
+      if (sc) glideScroll(sc, -clamp(velocity(t).vy, -6000, 6000));
     } else if (G.axis === "dismiss") {
       const { vx, vy } = velocity(t);
       const d = c.dismiss();
@@ -230,7 +282,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     // Restoring the card's scrolling triggers a style recalculation; do it after the
     // close has taken its measurements rather than before.
     root.classList.remove("zoom-dragging");
-    if (G.axis === "page" || G.axis === "dismiss") suppressClickUntil = performance.now() + 150;
+    if (G.axis === "page" || G.axis === "dismiss" || G.axis === "scroll") suppressClickUntil = performance.now() + 150;
   };
 
   const onTouchStart = (e: TouchEvent) => {
@@ -239,7 +291,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       return;
     }
     const p = e.touches[0];
-    start(p.clientX, p.clientY, e.timeStamp, "touch");
+    start(p.clientX, p.clientY, e.timeStamp, "touch", e.target);
   };
   const onTouchMove = (e: TouchEvent) => {
     if (!G.on || G.type !== "touch") return;
@@ -264,7 +316,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   };
   const onPointerDown = (e: PointerEvent) => {
     if (e.pointerType === "touch" || e.button !== 0) return;
-    start(e.clientX, e.clientY, e.timeStamp, "mouse");
+    start(e.clientX, e.clientY, e.timeStamp, "mouse", e.target);
     if (G.on) followPointer(true);
   };
   const onPointerMove = (e: PointerEvent) => {
@@ -534,13 +586,12 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     pullBy(dx);
   };
 
-  // Trackpad: a two-finger swipe along the pager turns one page. The rest of that
+  // Trackpad: a two-finger swipe along the pager (paging.swipeDistance of travel) turns one page. The rest of that
   // swipe, its momentum included, is ignored, but a new swipe turns the next page
   // right away, even while the last one's momentum is still arriving (as arrow keys
   // can). A new swipe is told apart from momentum the same way as for wheel dismiss:
   // momentum only ever slows, so the speed dipping and picking up again is fingers
   // back down. A swipe the other way, or after a real pause, is always new.
-  const SWIPE_PX = 40; // travel that turns a page
   const pageTail = swipeTail();
   let pageAcc = 0;
   let pageLastT = 0;
@@ -554,7 +605,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   const pageBy = (delta: number) => {
     if (Math.sign(pageAcc) !== Math.sign(delta)) pageAcc = 0;
     pageAcc += delta;
-    if (Math.abs(pageAcc) > SWIPE_PX) {
+    if (Math.abs(pageAcc) > c.paging().swipeDistance) {
       c.page(Math.sign(delta));
       pageTail.start(Math.sign(delta));
       pageAcc = 0;
@@ -570,9 +621,10 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     pageBy(dx);
   };
   // Vertical pager: vertical swipes page, once the card's own content has reached
-  // its top or bottom. As with closing, a swipe that runs into the edge doesn't turn
-  // the page; a new swipe made at the edge does, so a long card can be read to the
-  // end without flying past it.
+  // its top or bottom. By default (paging.atEdge "new-swipe"), as with closing, a
+  // swipe that runs into the edge doesn't turn the page; a new swipe made at the edge
+  // does, so a long card can be read to the end without flying past it. With
+  // "continue", reaching the edge turns the page straight away.
   const onVerticalPagingWheel = (e: WheelEvent) => {
     const scroller = c.activeScroller();
     if (!scroller) return;
@@ -593,7 +645,15 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       if (dy < 0) W.armedTop = true;
       else W.armedBottom = true;
     }
-    if (!atEdgeThisWay || !(dy < 0 ? W.armedTop : W.armedBottom)) return; // scrolls the card's content
+    const armed = c.paging().atEdge === "continue" || (dy < 0 ? W.armedTop : W.armedBottom);
+    if (!atEdgeThisWay || !armed) {
+      // Scrolls the card's content: natively when over it, by hand from anywhere else.
+      if (offCard(e.target)) {
+        e.preventDefault();
+        scroller.scrollBy({ top: dy, behavior: Math.abs(dy) >= 60 ? "smooth" : "instant" });
+      }
+      return;
+    }
     e.preventDefault();
     pageClock(now);
     pageBy(dy);
@@ -699,6 +759,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
 
   const detach = () => {
     clearTimeout(armedTimer);
+    stopGlide();
     root.removeEventListener("touchstart", onTouchStart);
     root.removeEventListener("touchmove", onTouchMove);
     root.removeEventListener("touchend", onTouchEnd);

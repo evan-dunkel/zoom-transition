@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { REST, clamp, defaultTiming, springTo, type ZoomTiming } from "./springs";
 import { createFlight, measureHero, prepareSnapshot, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
-import { attachGestures, type DismissEdges, type GestureDismiss, type ZoomVelocity } from "./gestures";
+import { attachGestures, type DismissEdges, type GestureDismiss, type GesturePaging, type ZoomVelocity } from "./gestures";
 
 /* ------------------------------------------------------------------ types */
 
@@ -91,6 +91,20 @@ const resolveEdges = (e: ZoomEdges | undefined): DismissEdges => {
   return { top: e.top ?? DEFAULT_EDGES.top, bottom: e.bottom ?? DEFAULT_EDGES.bottom };
 };
 
+/** How swiping between a group's cards feels. */
+export type ZoomPaging = {
+  /** Trackpad or mouse wheel: how far (px) a swipe travels before it turns the page. */
+  swipeDistance: number;
+  /**
+   * Vertical pager: what scrolling into the top or bottom of a card's content does.
+   * "new-swipe" (default): it stops there, and a new swipe turns the page, so a long
+   * read can't fly past its end. "continue": it turns the page straight away, so one
+   * swipe can carry on into the next card.
+   */
+  atEdge: "new-swipe" | "continue";
+};
+const defaultPaging: GesturePaging = { swipeDistance: 40, atEdge: "new-swipe" };
+
 const defaultLanding: ZoomLanding = { widthRatio: 1, topOffset: 0 };
 const defaultDismiss: ZoomDismiss = {
   distance: 130,
@@ -130,8 +144,11 @@ export type ZoomProviderProps = {
   landing?: Partial<ZoomLanding>;
   /** Drag-to-dismiss thresholds and feel. */
   dismiss?: Partial<ZoomDismiss>;
-  /** Swipe between the items of a group. When false, only the opened item gets a card. Default true. */
-  paging?: boolean;
+  /**
+   * Swipe between the items of a group. When false, only the opened item gets a card.
+   * Default true; pass options to tune it (how fast a page turn settles is timing.page).
+   */
+  paging?: boolean | Partial<ZoomPaging>;
   /**
    * Which way the cards of a group are laid out and swiped through.
    * - "horizontal" (default): side by side; swipe sideways to page, pull down to close.
@@ -1586,6 +1603,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const gestures = attachGestures(root, {
       phase: () => S.phase,
       dismiss,
+      paging: () => {
+        const pg = latest.current.paging;
+        return typeof pg === "object" ? { ...defaultPaging, ...pg } : defaultPaging;
+      },
       speed,
       debug: () => !!latest.current.debug,
       count: () => S.ids.length,
