@@ -1,0 +1,37 @@
+import asyncio
+from playwright.async_api import async_playwright
+ST = "() => ({hash: location.hash, len: history.length, phase: document.querySelector('.zoom-root').dataset.phase || 'idle', active: document.querySelector('.zoom-card:not([inert])')?.dataset.zoomId?.split('-').slice(0,2).join('-') || null})"
+async def main():
+    async with async_playwright() as p:
+        b = await p.chromium.launch()
+        pg = await b.new_page(viewport={'width':430,'height':900})
+        errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
+        await pg.goto('http://localhost:8765/book-store-zoom.html'); await pg.wait_for_timeout(800)
+        s = lambda: pg.evaluate(ST)
+        print('SESSION')
+        print(' start', await s())
+        await pg.click('.book >> nth=1'); await pg.wait_for_timeout(1000); print(' open', await s())
+        await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(700); await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(700); print(' swiped x2', await s())
+        await pg.go_back(); await pg.wait_for_timeout(900); print(' back', await s())
+        await pg.go_forward(); await pg.wait_for_timeout(1200); print(' forward', await s())
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(900); print(' UI close', await s())
+        # interrupted close -> reopen -> close
+        await pg.click('.book >> nth=0'); await pg.wait_for_timeout(1000)
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(60)
+        box = await pg.locator('.zoom-clone[data-zoom-id="the-salt-orchard"]').bounding_box()
+        await pg.mouse.click(box['x']+box['width']/2, box['y']+box['height']/2); await pg.wait_for_timeout(1200)
+        print(' reopened', await s())
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(900); print(' closed', await s())
+        print('ITEM')
+        await pg.select_option('.tune select >> nth=1', 'item')
+        await pg.click('.book >> nth=1'); await pg.wait_for_timeout(1000); print(' open', await s())
+        await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(700); await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(700); print(' paged x2', await s())
+        await pg.go_back(); await pg.wait_for_timeout(800); print(' back', await s())
+        await pg.go_back(); await pg.wait_for_timeout(800); print(' back', await s())
+        await pg.go_back(); await pg.wait_for_timeout(900); print(' back', await s())
+        await pg.click('.book >> nth=1'); await pg.wait_for_timeout(1000)
+        await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(700)
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(900); print(' paged then UI close', await s())
+        print(errs)
+        await b.close()
+asyncio.run(main())

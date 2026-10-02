@@ -1,0 +1,111 @@
+/* Zoom system. Theme with the --zoom-* custom properties. */
+.zoom-root {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.zoom-root.zoom-fixed { position: fixed; z-index: 1000; }
+.zoom-root[data-open] { visibility: visible; pointer-events: auto; }
+/* While closing, the page behind is live again (tap a source to turn the close
+   around); only the cards and covers on their way home catch taps. */
+.zoom-root[data-open][data-phase="closing"] { pointer-events: none; }
+.zoom-root[data-phase="closing"] .zoom-card,
+.zoom-root[data-phase="closing"] .zoom-clone { pointer-events: auto; cursor: pointer; }
+
+.zoom-dim { position: absolute; inset: 0; background: var(--zoom-dim-color, #000); opacity: 0; pointer-events: none; }
+.zoom-zoomer { position: absolute; inset: 0; transform-origin: 0 0; }
+.zoom-track { position: absolute; top: 0; left: 0; height: 100%; }
+
+/* The card itself is a transparent, rounded clip. Its visible surface (background
+   and rounded corners) belongs to .zoom-card-content, inside the scroller, so the
+   browser's own overscroll bounce moves the whole card, not just what's on it:
+   no seam between the card's edge and its content. */
+.zoom-card {
+  position: absolute;
+  transform-origin: 0 0;
+  overflow: hidden;
+  border-radius: var(--zoom-card-radius, 28px);
+  color: var(--zoom-card-color, inherit);
+}
+.zoom-card-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  container-type: inline-size; /* destination content can size itself with cqw */
+}
+.zoom-card-scroll::-webkit-scrollbar { display: none; }
+.zoom-dragging .zoom-card-scroll { overflow: hidden; }
+
+.zoom-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--zoom-close-bg, rgba(255, 255, 255, 0.72));
+  color: var(--zoom-close-color, #1c1c1e);
+  cursor: pointer;
+}
+.zoom-close::before { content: ""; position: absolute; inset: -7px; } /* 44px hit area */
+.zoom-close:focus-visible { outline: 2px solid var(--zoom-focus, currentColor); outline-offset: 2px; }
+
+.zoom-flight { position: absolute; inset: 0; pointer-events: none; }
+.zoom-clone { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+
+.zoom-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+[data-zoom-hidden] { visibility: hidden !important; }
+
+.zoom-card-content {
+  position: relative;
+  min-height: 100%;
+  overflow: clip; /* keep the content inside the rounded corners when it bounces */
+  border-radius: var(--zoom-card-radius, 28px);
+  background: var(--zoom-card-bg, #fff);
+}
+/* A zero-height sticky bar at the top of the content: the close button stays put
+   while you scroll, and moves with the card when it bounces. */
+.zoom-close-bar { position: sticky; top: 0; height: 0; z-index: 6; }
+
+/* Debug: wheel-dismiss edge zones (debug prop). If any of a band is on screen, a
+   swipe toward that edge can close the card. Brighter while the content is in the
+   zone; brightest while a swipe is armed. */
+.zoom-debug-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-start; /* clear of the close button */
+  padding: 3px 10px;
+  box-sizing: border-box;
+  pointer-events: none;
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  color: #ff2d78;
+  background: repeating-linear-gradient(135deg, rgba(255, 45, 120, 0.1) 0 6px, rgba(255, 45, 120, 0.03) 6px 12px);
+  box-shadow: inset 0 0 0 1px rgba(255, 45, 120, 0.45);
+  transition: background-color 120ms ease;
+}
+.zoom-debug-top { top: 0; align-items: flex-end; }
+.zoom-debug-bottom { bottom: 0; align-items: flex-start; }
+.zoom-root[data-zone-top] .zoom-card:not([inert]) .zoom-debug-top,
+.zoom-root[data-zone-bottom] .zoom-card:not([inert]) .zoom-debug-bottom { background-color: rgba(255, 45, 120, 0.14); }
+.zoom-root[data-zone-top] .zoom-card:not([inert]) .zoom-debug-top span::after,
+.zoom-root[data-zone-bottom] .zoom-card:not([inert]) .zoom-debug-bottom span::after { content: " · in zone"; }
+.zoom-root[data-armed-top] .zoom-card:not([inert]) .zoom-debug-top,
+.zoom-root[data-armed-bottom] .zoom-card:not([inert]) .zoom-debug-bottom { background-color: rgba(255, 45, 120, 0.38); }
+.zoom-root[data-armed-top] .zoom-card:not([inert]) .zoom-debug-top span::after,
+.zoom-root[data-armed-bottom] .zoom-card:not([inert]) .zoom-debug-bottom span::after { content: " · armed"; }

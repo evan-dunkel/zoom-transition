@@ -1,0 +1,15 @@
+<!DOCTYPE html><html><head><style>
+body{margin:0;font-family:sans-serif} main{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:24px}
+.tile img,.tile .ph{display:block;width:100%;aspect-ratio:1;border-radius:12px}
+.project .hero{aspect-ratio:16/9;border-radius:0}
+.project{padding-bottom:40px} .project h2,.project p{margin:16px 24px}
+</style><link rel="stylesheet" href="../src/zoom/zoom.css"></head><body>
+<main>
+ <a class="tile" href="/work/a"><div data-zoom-source="a" data-zoom-group="work"><div class="ph" style="background:linear-gradient(135deg,#f60,#309)"></div></div><h3>Project A</h3></a>
+ <a class="tile" href="/work/b"><div data-zoom-source="b" data-zoom-group="work"><div class="ph" style="background:linear-gradient(135deg,#0a8,#ff0)"></div></div><h3>Project B</h3></a>
+ <a class="tile" href="/work/c"><div data-zoom-source="c" data-zoom-group="work"><div class="ph" style="background:linear-gradient(135deg,#e33,#111)"></div></div><h3>Project C</h3></a>
+</main>
+<template data-zoom-destination="a"><article class="project"><div data-zoom-hero><div class="ph hero" style="background:linear-gradient(135deg,#f60,#309)"></div></div><h2>Project A</h2><p>Case study text…</p></article></template>
+<template data-zoom-destination="b"><article class="project"><div data-zoom-hero><div class="ph hero" style="background:linear-gradient(135deg,#0a8,#ff0)"></div></div><h2>Project B</h2><p>Case study text…</p></article></template>
+<template data-zoom-destination="c"><article class="project"><div data-zoom-hero><div class="ph hero" style="background:linear-gradient(135deg,#e33,#111)"></div></div><h2>Project C</h2><p>Case study text…</p></article></template>
+<div id="island"></div><script src="scan.js"></script></body></html>
