@@ -15,16 +15,16 @@ import { createPortal } from "react-dom";
 import { motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { REST, clamp, defaultTiming, springTo, type ZoomTiming } from "./springs";
 import { createFlight, measureHero, prepareSnapshot, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
-import { attachGestures, type DismissEdges, type GestureDismiss, type ZoomVelocity } from "./gestures";
+import { attachGestures, type DismissEdges, type GestureDismiss, type GesturePaging, type ZoomVelocity } from "./gestures";
 
 /* ------------------------------------------------------------------ types */
 
 export type ZoomGeometry = {
-  /** Minimum gap between a card and the left/right edges; neighbours peek through it. */
+  /** Minimum gap between a card and the left/right edges (neighbours peek through it in a horizontal pager). */
   side: number;
   /** Space between cards. */
   gap: number;
-  /** Space above and below the card. */
+  /** Space above and below the card (neighbours peek through it in a vertical pager). */
   top: number;
   bottom: number;
   /** Cards never get wider than this; extra width becomes side margin. */
@@ -91,6 +91,20 @@ const resolveEdges = (e: ZoomEdges | undefined): DismissEdges => {
   return { top: e.top ?? DEFAULT_EDGES.top, bottom: e.bottom ?? DEFAULT_EDGES.bottom };
 };
 
+/** How swiping between a group's cards feels. */
+export type ZoomPaging = {
+  /** Trackpad or mouse wheel: how far (px) a swipe travels before it turns the page. */
+  swipeDistance: number;
+  /**
+   * Vertical pager: what scrolling into the top or bottom of a card's content does.
+   * "new-swipe" (default): it stops there, and a new swipe turns the page, so a long
+   * read can't fly past its end. "continue": it turns the page straight away and the
+   * swipe carries on into the next card's content, so the cards read as one stream.
+   */
+  atEdge: "new-swipe" | "continue";
+};
+const defaultPaging: GesturePaging = { swipeDistance: 40, atEdge: "new-swipe" };
+
 const defaultLanding: ZoomLanding = { widthRatio: 1, topOffset: 0 };
 const defaultDismiss: ZoomDismiss = {
   distance: 130,
@@ -106,7 +120,8 @@ const defaultDismiss: ZoomDismiss = {
 };
 
 export type ZoomProviderProps = {
-  children: ReactNode;
+  /** Optional: with scan, the sources can be the page's own markup instead. */
+  children?: ReactNode;
   /** The destination for a source: any React content. Mark its shared element with <ZoomHero>. */
   renderDestination: (id: string) => ReactNode;
   /** Element the overlay is portalled into (must be positioned). Defaults to document.body, as a fixed overlay. */
@@ -130,11 +145,47 @@ export type ZoomProviderProps = {
   landing?: Partial<ZoomLanding>;
   /** Drag-to-dismiss thresholds and feel. */
   dismiss?: Partial<ZoomDismiss>;
-  /** Swipe between the items of a group. When false, only the opened item gets a card. Default true. */
-  paging?: boolean;
+  /**
+   * Swipe between the items of a group. When false, only the opened item gets a card.
+   * Default true; pass options to tune it (how fast a page turn settles is timing.page).
+   */
+  paging?: boolean | Partial<ZoomPaging>;
+  /**
+   * Which way the cards of a group are laid out and swiped through.
+   * - "horizontal" (default): side by side; swipe sideways to page, pull down to close.
+   * - "vertical": stacked like a feed; swipe or scroll up and down to page, and drag or
+   *   scroll a card sideways (either way) to close. Up/Down arrows page. The card's own
+   *   content still scrolls first; paging takes over at its top and bottom.
+   */
+  orientation?: "horizontal" | "vertical";
+  /**
+   * How a group's cards are arranged while open.
+   * - "pager" (default): one card per page, each the height of the screen; swipe to
+   *   page (see orientation).
+   * - "stream": one continuous column, each card as tall as its content, scrolled
+   *   natively like a document. No paging: the visible card is whichever sits under
+   *   the top third of the screen, and that's the one that flies home on close.
+   *   Close with the close button (it stays in view), Escape, or by dragging or
+   *   scrolling sideways.
+   */
+  layout?: "pager" | "stream";
   /** While open, hide every item of the group on the page (not just the visible one), so
    *  nothing shows twice in the gaps between cards. Default true. */
   hideGroupWhileOpen?: boolean;
+  /**
+   * While open, keep the group's other items on the page at this opacity instead of
+   * hiding them; only the visible item's own source is hidden. They follow the
+   * visible card: dimming as it opens, and back to full as it closes and lands.
+   * Takes precedence over hideGroupWhileOpen.
+   */
+  groupOpacity?: number;
+  /**
+   * Which cards fly back to their sources when the zoom closes.
+   * - "group" (default): every card in the group flies home to its own source.
+   * - "visible": only the visible card does. The others stay where they are and fade
+   *   out with it (and fade in with it when it opens), for a calmer close.
+   */
+  flyHome?: "group" | "visible";
   /** The close button on each card: true (default), false for none, or render your own.
    *  Your element closes the card if it (or a parent) has data-zoom-close, or calls close(). */
   closeButton?: boolean | ((close: () => void) => ReactNode);
@@ -156,7 +207,21 @@ export type ZoomProviderProps = {
 };
 
 type Phase = "idle" | "opening" | "open" | "closing";
-type Layout = { W: number; H: number; side: number; gap: number; cardW: number; step: number; top: number; cardH: number };
+type Layout = {
+  W: number;
+  H: number;
+  side: number;
+  gap: number;
+  cardW: number;
+  /** Distance from one card to the next along the paging axis. */
+  step: number;
+  top: number;
+  cardH: number;
+  /** Cards are stacked top to bottom and the track moves vertically. */
+  vertical: boolean;
+  /** One natively scrolled column of content-height cards (implies vertical). */
+  stream: boolean;
+};
 type SourceEntry = { id: string; group: string; el: HTMLElement };
 type CardValues = { x: MotionValue<number>; y: MotionValue<number>; s: MotionValue<number>; o: MotionValue<number> };
 type HeroContent = { children: ReactNode; className?: string; style?: CSSProperties; live: boolean };
@@ -434,12 +499,17 @@ const ZoomCard = memo(function ZoomCard({
       className="zoom-card"
       data-zoom-id={id}
       aria-label={label}
-      inert={!active}
+      inert={!active && !layout.stream}
       style={{
-        left: j * layout.step,
-        top: layout.top,
+        // In a stream, cards sit in the column's own flow at their content's height.
+        ...(layout.stream
+          ? {}
+          : {
+              left: layout.vertical ? layout.side : j * layout.step,
+              top: layout.vertical ? j * layout.step : layout.top,
+              height: layout.cardH,
+            }),
         width: layout.cardW,
-        height: layout.cardH,
         x: v.x,
         y: v.y,
         scale: v.s,
@@ -483,6 +553,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const zoomerRef = useRef<HTMLDivElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
   const flightRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
 
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [session, setSession] = useState<{ ids: string[]; key: number } | null>(null);
@@ -521,10 +592,14 @@ export function ZoomProvider(props: ZoomProviderProps) {
     sessionKey: 0,
     /** Portalled into document.body as a fixed overlay (no container given). */
     fixed: false,
+    /** groupOpacity for this session (null: the group is hidden or shown as hideGroupWhileOpen says). */
+    groupOpacity: null as number | null,
+    /** flyHome is "visible" for this session: the other cards fade with the visible one. */
+    flyVisible: false,
   }).current;
 
   // The shared zoom: the whole pager (card, metadata, neighbours) scales together.
-  const trackX = useMotionValue(0);
+  const track = useMotionValue(0);
   const zx = useMotionValue(0);
   const zy = useMotionValue(0);
   const zs = useMotionValue(1);
@@ -649,11 +724,15 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.histDepth += 1;
     window.history.pushState({ zoom: id, depth: S.histDepth }, "", urlFor(id));
   };
-  /** The visible item changed: a new entry ("item" mode) or just a new address ("session" mode). */
-  const recordPage = (id: string) => {
+  /**
+   * The visible item changed: a new entry ("item" mode) or just a new address ("session"
+   * mode). Scrolling a stream only ever updates the address: an entry per piece
+   * scrolled past would make Back crawl.
+   */
+  const recordPage = (id: string, replace = false) => {
     const h = historyOption();
     if (!h || S.fromPop || S.histDepth === 0) return;
-    if (h.mode === "item") {
+    if (h.mode === "item" && !replace) {
       S.histDepth += 1;
       window.history.pushState({ zoom: id, depth: S.histDepth }, "", urlFor(id));
     } else {
@@ -690,9 +769,35 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const geo = { ...defaultGeometry, ...(typeof g === "function" ? g({ width: W, height: H }) : g) };
     const cardW = Math.min(W - geo.side * 2, geo.maxCardWidth);
     const side = (W - cardW) / 2;
-    return { W, H, side, gap: geo.gap, cardW, step: cardW + geo.gap, top: geo.top, cardH: H - geo.top - geo.bottom };
+    const cardH = H - geo.top - geo.bottom;
+    const stream = latest.current.layout === "stream";
+    const vertical = stream || latest.current.orientation === "vertical";
+    return { W, H, side, gap: geo.gap, cardW, step: (vertical ? cardH : cardW) + geo.gap, top: geo.top, cardH, vertical, stream };
   };
-  const targetX = (i: number) => S.L!.side - i * S.L!.step;
+  /** Where the track sits when page i is the visible one. */
+  const trackAt = (i: number) => (S.L!.stream ? 0 : (S.L!.vertical ? S.L!.top : S.L!.side) - i * S.L!.step);
+  /** Card j's untransformed top-left, in the root, with the track at `t`. */
+  const slot = (j: number, t = track.get()) => {
+    const L = S.L!;
+    if (L.stream) {
+      // Where the column's flow puts it, less how far the column is scrolled.
+      const card = cardEls.current.get(S.ids[j]);
+      const sc = streamRef.current;
+      return { x: card?.offsetLeft ?? L.side, y: (card?.offsetTop ?? 0) - (sc?.scrollTop ?? 0) };
+    }
+    return L.vertical ? { x: L.side, y: t + j * L.step } : { x: t + j * L.step, y: L.top };
+  };
+  /** Stream: scroll the column so card j's top sits at the layout's top (as far as it can). */
+  const scrollStreamTo = (j: number, smooth = false) => {
+    const sc = streamRef.current;
+    const card = cardEls.current.get(S.ids[j]);
+    if (!sc || !card) return;
+    const top = Math.max(0, card.offsetTop - S.L!.top);
+    if (smooth) sc.scrollTo({ top, behavior: "smooth" });
+    else sc.scrollTop = top;
+  };
+  /** A movement of the track, as screen x/y. */
+  const alongTrack = (d: number) => (S.L!.vertical ? { x: 0, y: d } : { x: d, y: 0 });
   const rel = (r: DOMRect, root: DOMRect = rootRef.current!.getBoundingClientRect()): Rect => ({
     x: r.left - root.left,
     y: r.top - root.top,
@@ -742,9 +847,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const updateAllFocus = () => {
     if (!S.L) return;
-    const x = trackX.get();
+    const x = track.get();
     S.ids.forEach((id, j) => {
-      const d = Math.abs(x - targetX(j)) / S.L!.step;
+      const d = Math.abs(x - trackAt(j)) / S.L!.step;
       getItem(id, j).focus.set(clamp(1 - d, 0, 1));
     });
   };
@@ -761,7 +866,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const liveKey = useRef(0);
   /** The card's scroller, for following content scrolled while the hero is in flight. */
-  const scrollerOf = (id: string) => cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-card-scroll") ?? null;
+  const scrollerOf = (id: string) =>
+    S.L?.stream ? streamRef.current : cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-card-scroll") ?? null;
   function startFlight(
     it: Item,
     hero: HTMLElement,
@@ -789,15 +895,19 @@ export function ZoomProvider(props: ZoomProviderProps) {
       // slides with them.
       offset: () => {
         if (it.flightScroll0 === null && it.flightTrack0 === null) return NO_OFFSET;
-        const x = it.flightTrack0 === null ? 0 : (trackX.get() - it.flightTrack0) * zs.get();
+        const paged = alongTrack(it.flightTrack0 === null ? 0 : (track.get() - it.flightTrack0) * zs.get());
         const y = it.flightScroll0 === null ? 0 : -(it.flightScrollNow - it.flightScroll0) * zs.get() * it.cv.s.get();
-        return { x, y };
+        return { x: paged.x, y: paged.y + y };
       },
+      // The hero's shadow belongs to it in the card, not on the source: it fades in as
+      // the card opens and out as it closes, following the item's progress.
+      shadowOpacity: () => it.progress.get(),
       // Once it's following scrolled content, the copy is part of that content: hide
       // whatever has scrolled past the card's top or bottom edge, like the rest of it.
       clip: () => {
         if (it.flightScroll0 === null || it.flightScrollNow === it.flightScroll0 || !S.L) return null;
-        const top = zy.get() + zs.get() * (S.L.top + it.cv.y.get());
+        if (S.L.stream) return { top: zy.get(), bottom: zy.get() + zs.get() * S.L.H };
+        const top = zy.get() + zs.get() * (slot(it.j).y + it.cv.y.get());
         return { top, bottom: top + zs.get() * it.cv.s.get() * S.L.cardH };
       },
     });
@@ -836,8 +946,57 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (!Number.isFinite(it.sLand)) return clamp(it.cv.o.get(), 0, 1);
     return clamp((it.cv.s.get() - it.sLand) / (1 - it.sLand), 0, 1);
   };
+  /** The visible card's progress, 0 on its source to 1 open (the fade, with reduced motion). */
+  const visibleProgress = () => {
+    if (S.reduced) return clamp(fade.get(), 0, 1);
+    const it = items.current.get(S.ids[S.index]);
+    return it ? clamp(progressOf(it), 0, 1) : 1;
+  };
+  /**
+   * Everything that follows the visible card: the rest of the group on the page (with
+   * groupOpacity) and, when only the visible card flies home, the other cards.
+   */
+  /**
+   * groupOpacity: each source's share of the group's opacity. 1 for the rest of the
+   * group, 0 for the visible item's own source. When the visible item changes while
+   * open (a page turn, or scrolling a stream on to the next piece), the two swap
+   * softly instead of one snapping out and the other snapping in.
+   */
+  const presence = useRef(new Map<string, MotionValue<number>>());
+  const presenceOf = (id: string) => {
+    let mv = presence.current.get(id);
+    if (!mv) {
+      mv = motionValue(1);
+      presence.current.set(id, mv);
+      mv.on("change", () => writeGroupOpacity(id, groupBase()));
+    }
+    return mv;
+  };
+  /** The dimmed group's opacity: full on the page, groupOpacity once a card is open. */
+  const groupBase = () => (S.groupOpacity === null ? 1 : 1 - (1 - S.groupOpacity) * visibleProgress());
+  function writeGroupOpacity(id: string, base: number) {
+    if (S.groupOpacity === null || S.phase === "idle") return;
+    const el = sources.current.get(id)?.el;
+    if (!el || el.dataset.zoomDimmed === undefined) return;
+    el.style.setProperty("--zoom-group-opacity", String(base * (presence.current.get(id)?.get() ?? 1)));
+  }
+  const followVisible = () => {
+    if (S.groupOpacity === null && !S.flyVisible) return;
+    const p = visibleProgress();
+    if (S.groupOpacity !== null) {
+      const base = groupBase();
+      S.ids.forEach((id) => writeGroupOpacity(id, base));
+    }
+    if (S.flyVisible && !S.reduced) {
+      // Squared, so they're mostly gone before the visible card has shrunk much.
+      S.ids.forEach((id, j) => {
+        if (j !== S.index) getItem(id, j).cv.o.set(p * p);
+      });
+    }
+  };
   const updateDerived = () => {
     if (S.phase === "idle") return;
+    followVisible();
     if (S.reduced) {
       const f = clamp(fade.get(), 0, 1);
       zoomOpacity.set(f);
@@ -865,12 +1024,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const off = [
       zs.on("change", updateDerived),
       zs.on("change", updateAllProgress),
-      trackX.on("change", () =>
+      track.on("change", () =>
         items.current.forEach((it) => {
           if (it.flight && it.flightTrack0 !== null) it.flight.invalidate();
         }),
       ),
-      trackX.on("change", updateAllFocus),
+      track.on("change", updateAllFocus),
       fade.on("change", updateDerived),
     ];
     return () => off.forEach((u) => u());
@@ -889,9 +1048,45 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
   }, []);
 
-  /** While open: hide the group's items on the page, or just the visible one. */
+  /** With groupOpacity: the visible item's source hidden, the others dimmed (following followVisible). */
+  const markGroup = (hideVisible: boolean) => {
+    S.ids.forEach((id, j) => {
+      const el = sources.current.get(id)?.el;
+      if (!el) return;
+      el.dataset.zoomDimmed = "";
+      if (j === S.index) {
+        // Hidden outright while its card or flight covers it; its share stays 0 after.
+        if (hideVisible) el.dataset.zoomHidden = "";
+        presenceOf(id).jump(0);
+      } else {
+        delete el.dataset.zoomHidden;
+        presenceOf(id).jump(1);
+      }
+    });
+  };
+  /** The visible item changed while open: its source fades out as the last one's fades back in. */
+  const swapVisible = (previous: number, next: number) => {
+    const spec = timing().fade;
+    const prevEl = sources.current.get(S.ids[previous])?.el;
+    if (prevEl) {
+      delete prevEl.dataset.zoomHidden;
+      prevEl.dataset.zoomDimmed = "";
+    }
+    const nextEl = sources.current.get(S.ids[next])?.el;
+    if (nextEl) nextEl.dataset.zoomDimmed = "";
+    springTo(presenceOf(S.ids[previous]), 1, spec, { restDelta: REST.opacity, speed: speed() });
+    springTo(presenceOf(S.ids[next]), 0, spec, { restDelta: REST.opacity, speed: speed() });
+  };
+  const unmarkGroup = (el: HTMLElement) => {
+    delete el.dataset.zoomDimmed;
+    el.style.removeProperty("--zoom-group-opacity");
+  };
+  /** While open: hide the group's items on the page, or just the visible one (dimming the rest). */
   const hideForOpen = () => {
-    if (latest.current.hideGroupWhileOpen === false) {
+    if (S.groupOpacity !== null) {
+      markGroup(true);
+      followVisible();
+    } else if (latest.current.hideGroupWhileOpen === false) {
       S.ids.forEach((id, j) => {
         const el = sources.current.get(id)?.el;
         if (!el) return;
@@ -951,12 +1146,14 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.reduced = !!reduceRef.current;
     const d = latest.current.dim;
     S.dimMax = typeof d === "function" ? d() : d ?? 0.35;
+    S.groupOpacity = latest.current.groupOpacity ?? null;
+    S.flyVisible = latest.current.flyHome === "visible";
     S.pendingOpen = id;
     S.origin = entry.el;
     S.mode = "zoom";
     setPhase("opening");
     ids.forEach((i, j) => resetItem(getItem(i, j)));
-    trackX.jump(targetX(S.index)); // so the freshly mounted track renders in place
+    track.jump(trackAt(S.index)); // so the freshly mounted track renders in place
     updateAllFocus();
     setLayout(S.L);
     setIndexState(S.index);
@@ -989,6 +1186,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       dimRef.current!.style.opacity = "0";
       root.dataset.open = "";
       emitAll("opening");
+      if (S.groupOpacity !== null) markGroup(false); // the others dim with the fade
       // Reduced motion crossfades, so the page's items disappear once the cards cover them.
       springTo(fade, 1, T.fade, { restDelta: REST.opacity, speed: sp }).then(() => {
         if (gen !== S.gen) return;
@@ -1004,6 +1202,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
       if (el) getItem(other, j).sLand = zoomOnto(rel(el.getBoundingClientRect()), 0, 0).s;
     });
 
+    // A stream opens scrolled to this item's card (as near the top as the column allows).
+    if (L.stream) scrollStreamTo(S.index);
+    const at = slot(S.index);
+
     // Measure at full size first, before the zoom is applied (and before any writes).
     const card = cardEls.current.get(id)!;
     const hero = heroFor(id);
@@ -1013,10 +1215,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (hero) {
       const hr = hero.getBoundingClientRect();
       const cr = card.getBoundingClientRect();
-      heroTarget = { x: L.side + (hr.left - cr.left), y: L.top + (hr.top - cr.top), w: hr.width, h: hr.height };
+      heroTarget = { x: at.x + (hr.left - cr.left), y: at.y + (hr.top - cr.top), w: hr.width, h: hr.height };
     }
 
-    const z = zoomOnto(src, L.side, L.top);
+    const z = zoomOnto(src, at.x, at.y);
     S.s0 = z.s;
     zx.jump(z.x);
     zy.jump(z.y);
@@ -1039,7 +1241,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     it.sLand = z.s;
     if (hero && heroTarget && pre) {
       it.srcFit = fitOf(pre.metrics, src);
-      const f = startFlight(it, hero, src, heroTarget, pre, targetX(S.index));
+      const f = startFlight(it, hero, src, heroTarget, pre, trackAt(S.index));
       anims.push(
         springTo(f.cx, f.to.cx, T.open, { speed: sp }),
         springTo(f.cy, f.to.cy, T.open, { speed: sp }),
@@ -1055,6 +1257,35 @@ export function ZoomProvider(props: ZoomProviderProps) {
       openDone();
     });
   }, [session]);
+
+  // Stream: the visible card is the one under the top third of the column. Follows the
+  // reader's scrolling (once per frame), moving which source is hidden, which card
+  // closes, and the address.
+  useEffect(() => {
+    const sc = streamRef.current;
+    if (!session || !sc) return;
+    let raf = 0;
+    const pick = () => {
+      raf = 0;
+      if (S.phase !== "open") return;
+      const box = sc.getBoundingClientRect();
+      const line = box.top + box.height / 3;
+      let best = S.index;
+      S.ids.forEach((id, j) => {
+        const r = cardEls.current.get(id)?.getBoundingClientRect();
+        if (r && r.top <= line && r.bottom > line) best = j;
+      });
+      if (best !== S.index) setIndex(best, true);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(pick);
+    };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [session, layout?.stream]);
 
   // Static heroes fly as a frozen snapshot, which is slow to build. Build it while
   // nothing is moving, so closing (often mid-gesture) doesn't have to.
@@ -1091,18 +1322,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   /* -------------------------------------------------------------- paging */
 
-  const setIndex = (i: number) => {
-    S.refocus = !!rootRef.current?.contains(document.activeElement);
+  /** quiet: the visible card changed because the reader scrolled a stream: no focus move, no announcement. */
+  const setIndex = (i: number, quiet = false) => {
+    S.refocus = !quiet && !!rootRef.current?.contains(document.activeElement);
     const previous = S.index;
     S.index = i;
     if (previous !== i && (S.phase === "open" || S.phase === "opening")) {
-      recordPage(S.ids[i]);
+      recordPage(S.ids[i], quiet);
       const prevId = S.ids[previous];
       if (prevId) emit(getItem(prevId, previous), "deactivated");
       emit(getItem(S.ids[i], i), "activated");
     }
-    if (S.phase === "open" && latest.current.hideGroupWhileOpen === false) hideForOpen();
+    if (S.phase === "open" && latest.current.hideGroupWhileOpen === false && S.groupOpacity === null) hideForOpen();
+    if (S.groupOpacity !== null) {
+      if (S.phase === "open" && previous !== i) swapVisible(previous, i);
+      else if (S.phase === "opening") hideForOpen();
+    }
+    if (S.flyVisible) followVisible();
     setIndexState(i);
+    if (quiet) return;
     const label = latest.current.getLabel?.(S.ids[i]) ?? S.ids[i];
     setAnnounce(`${label}, ${i + 1} of ${S.ids.length}`);
   };
@@ -1117,14 +1355,19 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const page = (d: number) => {
     if (S.phase !== "open" && S.phase !== "opening") return;
     const i = clamp(S.index + d, 0, S.ids.length - 1);
+    if (S.L?.stream) {
+      // No pages to turn: bring that card to the top (Back and Forward in "item" history).
+      if (i !== S.index) scrollStreamTo(i, !S.reduced);
+      return;
+    }
     if (i === S.index) {
       // At the end: a small push into the edge, then settle back.
-      if (!S.reduced) springTo(trackX, targetX(i), timing().page, { velocity: -d * 500, speed: speed() });
+      if (!S.reduced) springTo(track, trackAt(i), timing().page, { velocity: -d * 500, speed: speed() });
       return;
     }
     setIndex(i);
-    if (S.reduced) trackX.jump(targetX(i));
-    else springTo(trackX, targetX(i), timing().page, { speed: speed() });
+    if (S.reduced) track.jump(trackAt(i));
+    else springTo(track, trackAt(i), timing().page, { speed: speed() });
   };
 
   /* -------------------------------------------------------------- per-card transitions */
@@ -1147,21 +1390,20 @@ export function ZoomProvider(props: ZoomProviderProps) {
       vy: zoomVelocity?.vy ?? zy.getVelocity(),
       vs: zoomVelocity?.vs ?? zs.getVelocity(),
     };
-    const tx = trackX.get();
-    const tv = trackX.getVelocity();
-    trackX.jump(tx);
+    const t = track.get();
+    const tv = alongTrack(track.getVelocity());
+    track.jump(t);
     const velocities = new Map<string, { vx: number; vy: number; vs: number }>();
     S.ids.forEach((id, j) => {
       const { cv } = getItem(id, j);
       const C = { x: cv.x.get(), y: cv.y.get(), s: cv.s.get(), vx: cv.x.getVelocity(), vy: cv.y.getVelocity(), vs: cv.s.getVelocity() };
-      const px = tx + j * L.step;
-      const py = L.top;
+      const { x: px, y: py } = slot(j, t);
       cv.x.jump(Z.x + Z.s * (px + C.x) - px);
       cv.y.jump(Z.y + Z.s * (py + C.y) - py);
       cv.s.jump(Z.s * C.s);
       velocities.set(id, {
-        vx: Z.vx + Z.vs * (px + C.x) + Z.s * (tv + C.vx),
-        vy: Z.vy + Z.vs * (py + C.y) + Z.s * C.vy,
+        vx: Z.vx + Z.vs * (px + C.x) + Z.s * (tv.x + C.vx),
+        vy: Z.vy + Z.vs * (py + C.y) + Z.s * (tv.y + C.vy),
         vs: Z.vs * C.s + Z.s * C.vs,
       });
     });
@@ -1214,8 +1456,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.mode = "cards";
     const velocities = bake(zoomVelocity);
     updateAllProgress();
-    if (target === "open" && Math.abs(trackX.get() - targetX(index)) > 0.5) {
-      springTo(trackX, targetX(index), spec, { speed: sp });
+    if (target === "open" && Math.abs(track.get() - trackAt(index)) > 0.5) {
+      springTo(track, trackAt(index), spec, { speed: sp });
     }
 
     const order = S.ids.filter((_, j) => j !== index).concat(S.ids[index]); // active on top
@@ -1229,10 +1471,27 @@ export function ZoomProvider(props: ZoomProviderProps) {
       const v = velocities.get(id)!;
       const vx = v.vx;
       const vy = v.vy;
-      const P = { x: trackX.get() + it.j * L.step, y: L.top }; // the card's untransformed top-left
+      const P = slot(it.j); // the card's untransformed top-left
       const dest = m.dest;
 
       if (target === "sources" && it.landed) return Promise.resolve(); // already home
+
+      if (S.flyVisible && it.j !== index) {
+        // Only the visible card flies. The others stay where they are and fade with it
+        // (followVisible), heading back to their places only if the close turns around.
+        it.offOpacity?.();
+        it.offOpacity = null;
+        if (it.flight) {
+          endFlight(it);
+          if (hero) hero.style.visibility = "";
+        }
+        if (target === "sources") return Promise.resolve();
+        return Promise.all([
+          springTo(cv.x, 0, spec, { velocity: vx, speed: sp }),
+          springTo(cv.y, 0, spec, { velocity: vy, speed: sp }),
+          springTo(cv.s, 1, spec, { velocity: v.vs, restDelta: REST.scale, speed: sp }),
+        ]);
+      }
 
       if (!dest || !src) {
         // Nothing to return to: just fade (and settle back in place if reopening).
@@ -1273,8 +1532,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
       ];
 
       if (hero && off) {
-        const heroTarget: Rect =
-          target === "sources" ? dest : { x: targetX(index) + it.j * L.step + off.x, y: L.top + off.y, w: off.w, h: off.h };
+        const rest = slot(it.j, trackAt(index));
+        const heroTarget: Rect = target === "sources" ? dest : { x: rest.x + off.x, y: rest.y + off.y, w: off.w, h: off.h };
         if (it.flight) {
           // Already flying: turn it around, keeping its current speed. If it was
           // following the card's scrolling, fold that offset into its position first
@@ -1287,12 +1546,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
             if (dy) f.cy.jump(f.cy.get() + dy);
           }
           if (it.flightTrack0 !== null) {
-            const dx = (trackX.get() - it.flightTrack0) * zs.get();
-            if (dx) f.cx.jump(f.cx.get() + dx);
+            const d = alongTrack((track.get() - it.flightTrack0) * zs.get());
+            if (d.x) f.cx.jump(f.cx.get() + d.x);
+            if (d.y) f.cy.jump(f.cy.get() + d.y);
           }
           it.flightScroll0 = target === "open" ? scrollerOf(id)?.scrollTop ?? 0 : null;
           it.flightScrollNow = it.flightScroll0 ?? 0;
-          it.flightTrack0 = target === "open" ? targetX(index) : null;
+          it.flightTrack0 = target === "open" ? trackAt(index) : null;
           f.retarget(heroTarget);
           anims.push(
             springTo(f.cx, f.to.cx, spec, { velocity: vcx, restDelta: restPx, speed: sp }),
@@ -1301,7 +1561,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
           );
         } else {
           const from = wasLanded ? dest : m.heroRect!;
-          startFlight(it, hero, from, heroTarget, m.pre ?? prepareFlight(id, hero), target === "open" ? targetX(index) : null);
+          startFlight(it, hero, from, heroTarget, m.pre ?? prepareFlight(id, hero), target === "open" ? trackAt(index) : null);
           // The hero was moving with its card: its centre's speed follows from the card's.
           const f = it.flight!;
           const fvx = wasLanded ? 0 : toward(cvx + cvs * (off.x + off.w / 2), f.to.cx - f.cx.get());
@@ -1322,6 +1582,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         it.offOpacity = null;
         cv.o.set(0);
         delete src.el.dataset.zoomHidden;
+        if (S.groupOpacity !== null) presenceOf(id).jump(1); // the source is back, in full
         endFlight(it);
         it.landed = true;
         emit(it, "closed");
@@ -1379,7 +1640,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
       hidden = r.left < left - 0.5 || r.top < top - 0.5 || r.right > left + p.clientWidth + 0.5 || r.bottom > top + p.clientHeight + 0.5;
     }
     if (!hidden) return false;
-    el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" as ScrollBehavior });
+    try {
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" as ScrollBehavior });
+    } catch {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" }); // older Safari has no "instant"
+    }
     return true;
   };
 
@@ -1399,6 +1664,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
     if (S.reduced) {
       setGroupHidden(false);
+      // The visible item's source fades back in with the rest of the page.
+      if (S.groupOpacity !== null) springTo(presenceOf(S.ids[S.index]), 1, timing().fadeOut, { restDelta: REST.opacity, speed: speed() });
       springTo(fade, 0, timing().fadeOut, { restDelta: REST.opacity, speed: speed() }).then(() => gen === S.gen && closeDone());
       return;
     }
@@ -1430,6 +1697,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   };
 
   const closeDone = () => {
+    presence.current.forEach((mv) => mv.jump(1)); // before the group is unmarked below
     S.ids.forEach((id, j) => {
       const it = getItem(id, j);
       if (!it.landed) emit(it, "closed");
@@ -1438,7 +1706,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
     items.current.forEach(resetItem);
     S.ids.forEach((id) => {
       const el = sources.current.get(id)?.el;
-      if (el) delete el.dataset.zoomHidden;
+      if (!el) return;
+      delete el.dataset.zoomHidden;
+      unmarkGroup(el);
     });
     setBackgroundInert(false);
     unlockScroll();
@@ -1466,6 +1736,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const gestures = attachGestures(root, {
       phase: () => S.phase,
       dismiss,
+      paging: () => {
+        const pg = latest.current.paging;
+        return typeof pg === "object" ? { ...defaultPaging, ...pg } : defaultPaging;
+      },
       speed,
       debug: () => !!latest.current.debug,
       count: () => S.ids.length,
@@ -1474,14 +1748,14 @@ export function ZoomProvider(props: ZoomProviderProps) {
       activeCard: () => cardEls.current.get(S.ids[S.index]) ?? null,
       activeScroller: () =>
         cardEls.current.get(S.ids[S.index])?.querySelector<HTMLElement>(".zoom-card-scroll") ?? null,
-      trackX,
+      track,
       zx,
       zy,
       zs,
-      targetX,
+      trackAt,
       setIndex,
       page,
-      settlePage: (i, velocity) => springTo(trackX, targetX(i), timing().page, { velocity, speed: speed() }),
+      settlePage: (i, velocity) => springTo(track, trackAt(i), timing().page, { velocity, speed: speed() }),
       close: (v, opts) => close(v, opts),
       reopen,
       cancelDismiss: (v) => {
@@ -1498,10 +1772,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
         return;
       }
       if (S.phase !== "open" && S.phase !== "opening") return; // arrows can interrupt an opening
-      if (e.key === "ArrowRight") {
+      if (S.L?.stream) return; // arrows scroll the column
+      const [back, next] = S.L?.vertical ? ["ArrowUp", "ArrowDown"] : ["ArrowLeft", "ArrowRight"];
+      if (e.key === next) {
         e.preventDefault();
         page(1);
-      } else if (e.key === "ArrowLeft") {
+      } else if (e.key === back) {
         e.preventDefault();
         page(-1);
       }
@@ -1565,7 +1841,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       if (S.phase !== "open") return;
       S.L = computeLayout();
       setLayout(S.L);
-      trackX.jump(targetX(S.index));
+      track.jump(trackAt(S.index));
     });
     ro.observe(root);
     return () => {
@@ -1587,7 +1863,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
       S.offDim?.();
       S.offDim = null;
       items.current.forEach(resetItem);
-      sources.current.forEach(({ el }) => delete el.dataset.zoomHidden);
+      sources.current.forEach(({ el }) => {
+        delete el.dataset.zoomHidden;
+        unmarkGroup(el);
+      });
       setBackgroundInert(false);
       unlockScroll();
       S.phase = "idle";
@@ -1647,18 +1926,37 @@ export function ZoomProvider(props: ZoomProviderProps) {
     else cardEls.current.delete(id);
   }, []);
   const resolved = dismiss();
+  // The edge zones are for closing past the top or bottom, which a vertical pager doesn't do.
   const zones = useMemo(
-    () => (props.debug ? { slop: resolved.wheelEdgeSlop, edges: resolved.wheel } : null),
-    [props.debug, resolved.wheelEdgeSlop, resolved.wheel],
+    () => (props.debug && props.orientation !== "vertical" ? { slop: resolved.wheelEdgeSlop, edges: resolved.wheel } : null),
+    [props.debug, props.orientation, resolved.wheelEdgeSlop, resolved.wheel],
   );
   const overlay =
     host &&
     createPortal(
-      <div ref={rootRef} className={fixed ? "zoom-root zoom-fixed" : "zoom-root"} role="dialog" aria-modal="true">
+      <div
+        ref={rootRef}
+        className={["zoom-root", fixed && "zoom-fixed", layout?.vertical && "zoom-vertical", layout?.stream && "zoom-streaming"]
+          .filter(Boolean)
+          .join(" ")}
+        role="dialog"
+        aria-modal="true"
+      >
         <motion.div ref={dimRef} className="zoom-dim" style={{ opacity: dimOpacity }} />
         <motion.div ref={zoomerRef} className="zoom-zoomer" style={{ x: zx, y: zy, scale: zs, opacity: zoomOpacity }}>
           {session && layout && (
-            <motion.div key={session.key} className="zoom-track" style={{ x: trackX }}>
+            <motion.div
+              key={session.key}
+              ref={layout.stream ? streamRef : undefined}
+              className={layout.stream ? "zoom-stream" : "zoom-track"}
+              style={
+                layout.stream
+                  ? { paddingTop: layout.top, paddingBottom: layout.top, rowGap: layout.gap }
+                  : layout.vertical
+                    ? { y: track }
+                    : { x: track }
+              }
+            >
               {session.ids.map((id, j) => (
                 <ZoomCard
                   key={id}

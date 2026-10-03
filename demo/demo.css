@@ -183,3 +183,178 @@ button { font: inherit; color: inherit; }
 .tune .check input { width: auto; height: auto; accent-color: var(--accent); }
 .tune .edges { display: inline-flex; align-items: center; gap: 6px 12px; margin: 0; padding: 0; border: 0; }
 .tune .edges legend { float: left; margin-right: 4px; padding: 0; color: var(--text2); }
+
+/* Layout switch: shelves or feed */
+.layout-switch { display: inline-flex; gap: 2px; margin: 12px 20px 0; padding: 2px; border-radius: 10px; background: var(--fill); }
+.layout-switch button { min-width: 0; flex: 1; height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; font-size: 14px; font-weight: 600; color: var(--text2); cursor: pointer; transition: background-color 200ms ease, color 200ms ease; }
+.layout-switch button[aria-pressed="true"] { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+
+/* Feed: a grid of every book that opens into a vertical pager */
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 12px; margin: 22px 0 0; padding: 0 16px; list-style: none; }
+@media (min-width: 640px) { .grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 24px 18px; padding: 0 20px; } }
+.grid li { min-width: 0; }
+.tile { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.tile .cover-wrap { width: 100%; }
+.tile .cover { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14), 0 6px 14px -4px rgba(0, 0, 0, 0.3); }
+.tile:active .cover-wrap { transform: scale(0.97); }
+.tile:focus-visible { outline: none; }
+.tile:focus-visible .cover-wrap { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.t-title { display: block; margin-top: 7px; font-size: 12px; line-height: 1.25; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .tile:active .cover-wrap { transform: none; opacity: 0.7; } }
+
+/* The card: dark and immersive whatever the page's theme, tinted with the book's colour. */
+.feed { --zoom-card-bg: #0d0d0f; --zoom-card-color: #f5f5f7; --zoom-close-bg: rgba(255, 255, 255, 0.16); --zoom-close-color: #fff; --zoom-card-radius: 24px; }
+.reel {
+  position: absolute;
+  inset: 0;
+  container-type: size; /* the cover sizes itself to the card's height too */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #f5f5f7;
+  background:
+    radial-gradient(120% 70% at 50% 28%, color-mix(in oklab, var(--tint) 70%, #0d0d0f) 0%, transparent 72%),
+    linear-gradient(180deg, color-mix(in oklab, var(--tint) 45%, #0d0d0f) 0%, #0d0d0f 78%);
+}
+.reel-count { position: absolute; top: 20px; left: 20px; margin: 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; color: rgba(255, 255, 255, 0.72); }
+/* Centred a little right of the middle: the front cover swings open to the left. */
+.reel-hero { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 56px 6cqw 12px 18cqw; }
+.reel-cover { width: min(48cqw, 32cqh, 220px); }
+.reel-cover .cover, .reel-cover.zoom-live .cover { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), 0 24px 48px -12px rgba(0, 0, 0, 0.6); }
+.reel-foot { display: flex; align-items: flex-end; gap: 14px; padding: 0 16px 22px 20px; }
+.reel-info { flex: 1; min-width: 0; }
+.reel-title { margin: 0; font-family: var(--serif); font-size: 24px; line-height: 1.15; font-weight: 600; text-wrap: balance; }
+.reel-author { margin: 4px 0 0; font-size: 16px; font-weight: 600; color: color-mix(in oklab, var(--tint) 30%, #fff); }
+.reel-meta { margin: 6px 0 0; font-size: 13px; color: rgba(255, 255, 255, 0.66); }
+.reel-about { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 10px 0 0; font-size: 14px; line-height: 1.45; color: rgba(255, 255, 255, 0.86); }
+@container (max-height: 560px) { .reel-about { -webkit-line-clamp: 2; } }
+.reel-rail { flex: none; display: flex; flex-direction: column; align-items: center; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.reel-rail li { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 52px; text-align: center; }
+.rail-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); font-size: 18px; line-height: 1; }
+.rail-pages { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rail-value { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rail-label { font-size: 11px; color: rgba(255, 255, 255, 0.66); }
+.rail-want { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.rail-want .rail-icon { transition: transform 150ms var(--ease-press), background-color 200ms ease, color 200ms ease; }
+.rail-want:active .rail-icon { transform: scale(0.92); }
+.rail-want[aria-pressed="true"] .rail-icon { background: #fff; color: #0d0d0f; }
+.rail-want:focus-visible { outline: none; }
+.rail-want:focus-visible .rail-icon { outline: 2px solid #fff; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .rail-want:active .rail-icon { transform: none; } }
+
+/* Portfolio: the feed adapted to long reads. Cards are reading surfaces in the page's own theme. */
+.portfolio {
+  --read: "Newsreader", ui-serif, "New York", Georgia, serif;
+  --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --zoom-card-radius: 20px;
+}
+.layout-switch { display: flex; width: min(360px, calc(100% - 40px)); }
+.pf-name { font-family: var(--display); font-weight: 750; letter-spacing: -0.02em; }
+.pf-intro { margin: 14px 20px 0; max-width: 34ch; font-family: var(--read); font-size: 21px; line-height: 1.35; text-wrap: pretty; }
+.pf .hint { margin-top: 10px; max-width: 46ch; font-size: 14px; }
+.pf-section { margin: 30px 20px 0; }
+.pf-label { margin: 0 0 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text2); }
+.pf-work, .pf-notes { margin: 0; padding: 0; list-style: none; }
+.pf-work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
+@media (min-width: 700px) { .pf-work { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; } }
+.pf-tile, .pf-row { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pf-tile-art { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; transition: transform 150ms var(--ease-press); }
+.pf-tile:active .pf-tile-art, .pf-row:active .pf-row-art { transform: scale(0.98); }
+.pf-tile-title { display: block; margin-top: 12px; font-family: var(--display); font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
+.pf-tile-meta { display: block; margin-top: 3px; font-size: 14px; line-height: 1.35; color: var(--text2); }
+.pf-notes { display: grid; }
+.pf-notes li + li { border-top: 1px solid var(--sep); }
+.pf-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 0; }
+.pf-row-art { position: relative; flex: none; display: block; width: 68px; aspect-ratio: 1; border-radius: 10px; overflow: hidden; transition: transform 150ms var(--ease-press); }
+.pf-row-text { display: grid; gap: 3px; min-width: 0; }
+.pf-row-meta { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--text2); }
+.pf-row-title { font-family: var(--display); font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.pf-row-summary { font-size: 14px; line-height: 1.4; color: var(--text2); }
+.pf-tile:focus-visible, .pf-row:focus-visible { outline: none; }
+.pf-tile:focus-visible .pf-tile-art, .pf-row:focus-visible .pf-row-art { outline: 3px solid var(--accent); outline-offset: 3px; }
+.pf { padding-bottom: 48px; }
+@media (prefers-reduced-motion: reduce) { .pf-tile:active .pf-tile-art, .pf-row:active .pf-row-art { transform: none; opacity: 0.7; } }
+
+/* A piece, open */
+.pf-page { padding-bottom: 8px; }
+/* The image sits on the card, inset over a band tinted with its own ground, like a
+   book's cover; the card grows out from behind it as it opens. */
+.pf-stage { padding: 20px 20px 4px; background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 26%, var(--card)) 0%, var(--card) 88%); }
+.pf-hero { position: relative; display: block; overflow: hidden; border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.pf-hero-note { border-radius: 12px; }
+@media (max-width: 540px) { .pf-stage { padding: 14px 14px 2px; } }
+.pf-hero-work { aspect-ratio: 4 / 3; }
+.pf-hero-note { aspect-ratio: 16 / 9; }
+.pf-text { max-width: 620px; margin: 0 auto; padding: 22px 22px 0; }
+.pf-eyebrow { margin: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text2); font-variant-numeric: tabular-nums; }
+.pf-title { margin: 8px 0 0; font-family: var(--display); font-size: clamp(30px, 8cqw, 44px); line-height: 1.04; font-weight: 750; letter-spacing: -0.025em; text-wrap: balance; }
+.pf-kicker { margin: 6px 0 0; font-size: 16px; color: var(--text2); }
+.pf-lede { margin: 18px 0 0; font-family: var(--read); font-size: 21px; line-height: 1.4; text-wrap: pretty; }
+.pf-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 22px 0 0; padding: 16px 0; border-top: 1px solid var(--sep); border-bottom: 1px solid var(--sep); }
+.pf-facts div { min-width: 0; }
+.pf-facts dt { font-size: 12px; color: var(--text2); }
+.pf-facts dd { margin: 3px 0 0; font-size: 15px; line-height: 1.3; }
+.pf-body h3 { margin: 32px 0 0; font-family: var(--display); font-size: 21px; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+.pf-body p { margin: 12px 0 0; font-family: var(--read); font-size: 18px; line-height: 1.6; text-wrap: pretty; }
+.pf-reading .pf-body:first-child p:first-child { margin-top: 24px; }
+.pf-body blockquote { margin: 26px 0; padding: 0 0 0 18px; border-left: 3px solid var(--accent); font-family: var(--read); font-style: italic; font-size: 23px; line-height: 1.35; text-wrap: balance; }
+.pf-figure { margin: 24px 0 0; }
+.pf-figure-art { position: relative; display: block; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; }
+.pf-figure figcaption { margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--text2); }
+.pf-next { margin: 44px 0 0; padding: 22px 0 28px; border-top: 1px solid var(--sep); text-align: center; }
+.pf-next-label { margin: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text2); }
+.pf-next-title { margin: 6px 0 0; font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.pf-next-hint { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 13px; color: var(--accent); }
+.pf-back { margin-top: 12px; height: 40px; padding: 0 18px; border: 0; border-radius: 20px; background: var(--fill); font-size: 15px; font-weight: 600; cursor: pointer; }
+
+/* Generated images (sample imagery). Everything scales with the box it's in. */
+.art { position: absolute; inset: 0; display: block; overflow: hidden; container-type: inline-size; background: var(--a-bg); color: var(--a-fg); }
+.art > *, .art .panel > *, .art .tiles > * { position: absolute; display: block; }
+.art-phones .ph { width: 30%; aspect-ratio: 9 / 19.5; border-radius: 4.5cqw; box-shadow: 0 2cqw 6cqw rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(var(--a-ac), var(--a-ac)) 50% 9% / 70% 7% no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.1)) 50% 24% / 80% 12% no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)) 50% 39% / 80% 12% no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.07), rgba(0, 0, 0, 0.07)) 50% 54% / 80% 12% no-repeat,
+    var(--a-fg); }
+.art-phones .ph-back { left: 20%; top: 18%; transform: rotate(-8deg); opacity: 0.85; }
+.art-phones .ph-front { left: 47%; top: 12%; }
+.art-type .glyph { left: 8%; top: 50%; transform: translateY(-50%); font: 600 46cqw/1 "Fraunces", Georgia, serif; letter-spacing: -0.04em; color: var(--a-fg); }
+.art-type .glyph::after { content: ""; position: absolute; left: 4%; right: 2%; bottom: 8%; height: 2.4cqw; background: var(--a-ac); }
+.art-type .lines { right: 8%; top: 22%; width: 22%; height: 56%; background: repeating-linear-gradient(to bottom, var(--a-fg) 0 1.4cqw, transparent 1.4cqw 5cqw); opacity: 0.55; }
+.art-bars .panel { left: 10%; top: 16%; right: 10%; bottom: 14%; border-radius: 3cqw; background: var(--a-fg); box-shadow: 0 2cqw 6cqw rgba(0, 0, 0, 0.12); }
+.art-bars .bar { bottom: 12%; width: 7%; height: calc(var(--h) * 0.7); border-radius: 1.4cqw 1.4cqw 0 0; background: var(--a-ac); }
+.art-bars .bar:nth-child(1) { left: 10%; } .art-bars .bar:nth-child(2) { left: 22%; } .art-bars .bar:nth-child(3) { left: 34%; }
+.art-bars .bar:nth-child(4) { left: 46%; } .art-bars .bar:nth-child(5) { left: 58%; } .art-bars .bar:nth-child(6) { left: 70%; }
+.art-bars .bar:nth-child(7) { left: 82%; }
+.art-bars .bar:nth-child(even) { opacity: 0.55; }
+.art-tiles .tiles { inset: 12% 18%; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 4cqw; }
+.art-tiles .tile-shape { position: relative; display: block; background: var(--a-fg); }
+.art-tiles .s-circle { border-radius: 50%; }
+.art-tiles .s-pill { border-radius: 999px; background: var(--a-ac); }
+.art-tiles .s-square { border-radius: 2cqw; opacity: 0.7; }
+.art-tiles .s-arch { border-radius: 50% 50% 0 0; background: var(--a-ac); }
+.art-tiles .s-dot { margin: 22%; border-radius: 50%; }
+.art-orbits .rings { left: 50%; top: 50%; width: 120cqw; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; background: repeating-radial-gradient(circle, transparent 0 7cqw, var(--a-fg) 7cqw 7.4cqw); opacity: 0.35; }
+.art-orbits .planet { width: 9cqw; aspect-ratio: 1; border-radius: 50%; background: var(--a-ac); box-shadow: 0 0 6cqw var(--a-ac); }
+.art-orbits .p1 { left: 62%; top: 26%; }
+.art-orbits .p2 { left: 24%; top: 62%; width: 5cqw; background: var(--a-fg); box-shadow: none; }
+.art-spring svg { inset: 0; width: 100%; height: 100%; overflow: visible; }
+.art-spring path { fill: none; stroke: var(--a-ac); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.art-spring line { stroke: var(--a-fg); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.5; vector-effect: non-scaling-stroke; }
+.art-shelf .spines { left: 8%; right: 8%; bottom: 18%; height: 62%; display: flex; align-items: flex-end; gap: 1.6cqw; border-bottom: 2cqw solid var(--a-fg); }
+.art-shelf .spine { position: relative; flex: 1; height: var(--h); border-radius: 1cqw 1cqw 0 0; background: var(--a-fg); }
+.art-shelf .spine.alt { background: var(--a-ac); }
+.art-shelf .spine:nth-child(4n) { opacity: 0.75; }
+.art-breathe .words { left: 8%; top: 50%; transform: translateY(-50%); display: grid; gap: 0.5cqw; font: 12cqw/0.95 var(--ui); letter-spacing: -0.03em; color: var(--a-fg); }
+.art-breathe .words span:nth-child(3) { color: var(--a-ac); }
+.art-draft .doc { left: 22%; right: 22%; top: 12%; bottom: -10%; border-radius: 2cqw; background: var(--a-fg); box-shadow: 0 2cqw 8cqw rgba(0, 0, 0, 0.18); }
+.art-draft .doc-title { left: 10%; top: 9%; width: 60%; height: 5cqw; border-radius: 1cqw; background: currentColor; opacity: 0.85; }
+.art-draft .doc-mark { left: 10%; top: 20%; width: 80%; height: 11cqw; border-radius: 1.5cqw; background: var(--a-ac); opacity: 0.85; }
+.art-draft .doc-lines { left: 10%; right: 10%; top: 38%; bottom: 0; background: repeating-linear-gradient(to bottom, currentColor 0 1.2cqw, transparent 1.2cqw 4.4cqw); opacity: 0.2; }
+.art-draft { color: #1c1c1e; }
+.art-draft[style*="#1c1c1e"] { color: #f5f5f7; }
+.pf-section { max-width: 980px; }
+.paging-tune { margin: 16px 20px 0; border: 0; max-width: 940px; }
+.paging-tune legend { float: left; width: 100%; margin-bottom: 2px; padding: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text2); }
+.paging-reset { height: 32px; padding: 0 12px; border: 1px solid var(--sep); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer; }

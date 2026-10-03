@@ -42,6 +42,31 @@
 }
 .zoom-card-scroll::-webkit-scrollbar { display: none; }
 .zoom-dragging .zoom-card-scroll { overflow: hidden; }
+/* Vertical pager: no overscroll bounce inside a card. Reaching the end stops dead and
+   the next swipe turns the page; a bounce kept the content moving at the edge, so a
+   new swipe there was hard to tell from the old one and the page wouldn't turn. */
+.zoom-vertical .zoom-card-scroll { overscroll-behavior-y: none; }
+
+/* Stream (layout="stream"): one natively scrolled column of cards, each as tall as its
+   content. The cards sit in the column's flow; the column is the only scroller, so
+   each card's close bar sticks to the top of the screen while that card is in view. */
+.zoom-stream {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.zoom-stream::-webkit-scrollbar { display: none; }
+.zoom-stream .zoom-card { position: relative; flex: none; overflow: clip; }
+.zoom-stream .zoom-card-scroll { height: auto; overflow: visible; }
+/* Hold still while a card is pulled sideways, and while cards fly home. */
+.zoom-dragging .zoom-stream,
+.zoom-root[data-phase="closing"] .zoom-stream { overflow-y: hidden; }
 
 .zoom-close {
   position: absolute;
@@ -67,6 +92,8 @@
 .zoom-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 [data-zoom-hidden] { visibility: hidden !important; }
+/* groupOpacity: the rest of the group, dimmed behind an open card. */
+[data-zoom-dimmed] { opacity: var(--zoom-group-opacity, 1); }
 
 .zoom-card-content {
   position: relative;

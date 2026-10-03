@@ -1,0 +1,72 @@
+/* Layout: one reading column on the page; open pieces are cards in one scrolling column. */
+:root {
+  --bg: #f6f6f3;
+  --card: #ffffff;
+  --text: #1b1c1e;
+  --muted: #676a70;
+  --line: rgba(27, 28, 30, 0.12);
+  --accent: #2457d6;
+  --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --read: "Newsreader", ui-serif, Georgia, serif;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111214; --card: #1c1d20; --text: #f2f2f0; --muted: #9b9ea4; --line: rgba(255, 255, 255, 0.12); --accent: #8aaeff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111214; --card: #1c1d20; --text: #f2f2f0; --muted: #9b9ea4; --line: rgba(255, 255, 255, 0.12); --accent: #8aaeff;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------------------------------------------------------------- index */
+
+main { max-width: 1000px; margin: 0 auto; padding: 40px 20px 64px; }
+.intro h1 { margin: 0; font: 750 36px/1.05 var(--display); letter-spacing: -0.02em; }
+.intro p { margin: 12px 0 0; max-width: 34ch; font: 21px/1.35 var(--read); }
+.intro .note { max-width: 46ch; font: 14px/1.45 var(--ui); color: var(--muted); }
+section { margin-top: 40px; }
+.label { margin: 0 0 14px; font-size: 12px; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+ul { margin: 0; padding: 0; list-style: none; }
+
+.work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+@media (min-width: 700px) { .work { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px 24px; } }
+.tile-image { aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; }
+.tile h3 { margin: 12px 0 0; font: 700 21px/1.2 var(--display); letter-spacing: -0.01em; }
+.tile p { margin: 3px 0 0; font-size: 14px; color: var(--muted); }
+
+.notes li + li { border-top: 1px solid var(--line); }
+.row { display: flex; gap: 14px; padding: 14px 0; }
+.row-image { flex: none; width: 68px; aspect-ratio: 1; border-radius: 10px; overflow: hidden; }
+.row h3 { margin: 2px 0 0; font: 700 18px/1.25 var(--display); }
+.row p { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+.meta { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--muted); }
+
+/* ---------------------------------------------------------------- a piece, open */
+
+/* Theme the zoom (see src/zoom/zoom.css for every --zoom-* property). */
+:root { --zoom-card-bg: var(--card); --zoom-card-color: var(--text); --zoom-card-radius: 20px; --zoom-close-bg: color-mix(in srgb, var(--card) 70%, transparent); --zoom-close-color: var(--text); }
+
+/* The image sits on the card, inset, like a cover on a table. Same radius as its tile. */
+.piece-image { margin: 20px 20px 0; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.piece-image.wide { aspect-ratio: 16 / 9; border-radius: 10px; }
+.piece-text { max-width: 620px; margin: 0 auto; padding: 22px 22px 40px; }
+.piece h2 { margin: 6px 0 0; font: 750 clamp(30px, 8cqw, 44px)/1.04 var(--display); letter-spacing: -0.025em; text-wrap: balance; }
+.piece h3 { margin: 30px 0 0; font: 700 21px/1.25 var(--display); }
+.piece p { margin: 12px 0 0; font: 18px/1.6 var(--read); text-wrap: pretty; }
+.piece .meta { margin: 0; font: 600 12px/1.4 var(--ui); }
+.piece .lede { font-size: 21px; line-height: 1.4; }
+.piece blockquote { margin: 26px 0; padding-left: 18px; border-left: 3px solid var(--accent); font: italic 23px/1.35 var(--read); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 22px 0 0; padding: 16px 0; border-block: 1px solid var(--line); }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { margin: 3px 0 0; font-size: 15px; }
+@media (max-width: 600px) { .piece-image { margin: 14px 14px 0; } }

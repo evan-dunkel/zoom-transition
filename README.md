@@ -17,7 +17,12 @@ and closing sends every card back to its own source.
   - `flight.ts` — the flying copy of the hero
   - `springs.ts` — SwiftUI-style springs (duration + bounce) mapped to Motion
   - `zoom.css` — required styles; theme with the `--zoom-*` properties
-- `demo/` — the Book Store, rebuilt on the system
+- `demo/` — three prototypes: the Book Store as shelves that page sideways
+  (`BookStore.tsx`), the Book Store as a feed that pages up and down (`BookFeed.tsx`),
+  and a design portfolio of long reads that opens into one continuous stream
+  (`Portfolio.tsx`)
+- `standalone/portfolio/` — the portfolio at its simplest: plain markup, one island, one
+  stylesheet (`npm run build:portfolio` → `dist/portfolio.html`). Start here to map it onto a site.
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.
@@ -152,8 +157,49 @@ React island, or keep the markup in Astro and use one small island with `scan`
   edge zones (if any of a band is on screen, a swipe toward that edge can close the
   card). They brighten while the content is in the zone and again while a swipe is armed.
   Only edges with wheel dismissal on get a band.
-- `paging` — swipe between a group's items (default true).
+- `paging` — swipe between a group's items (default true). Pass options to tune it:
+  `{ swipeDistance: 40, atEdge: "new-swipe" }`. `swipeDistance` is how far (px) a trackpad
+  or wheel swipe travels before it turns the page. `atEdge` (vertical pager) is what
+  scrolling into the end of a card's content does: `"new-swipe"` stops there and a new
+  swipe turns the page; `"continue"` turns it straight away and lets the swipe carry
+  on into the next card's content, so the cards read as one continuous stream. How quickly a page turn
+  settles is `timing.page` (default 0.5 s, no bounce).
+- `layout` — `"pager"` (default) or `"stream"`. A stream lays a group's cards out as one
+  continuous column, each card as tall as its content, scrolled natively like a document:
+  no paging, nothing to push through between pieces. The card under the top third of the
+  screen is the visible one (its source is the hidden one, and it's the one that flies
+  home). Close with the close button (it stays in view while reading), Escape, or by
+  dragging or scrolling sideways. Made for long reads (case studies, essays):
+
+  ```tsx
+  <ZoomProvider layout="stream" flyHome="visible" groupOpacity={0.35} ...>
+  ```
+- `orientation` — how a pager's cards are laid out and swiped through:
+  - `"horizontal"` (default): side by side. Swipe sideways to page; pull down to close.
+  - `"vertical"`: stacked like a feed, one card per page. Swipe, drag or scroll up and
+    down to page (Up/Down arrows too); drag or scroll a card sideways, either way, to
+    close (Escape and the close button still work). A card's own content scrolls first;
+    paging takes over at its top and bottom, and as with closing, a swipe that runs
+    into the edge doesn't turn the page — a new swipe there does. `dismiss.drag` and
+    `dismiss.wheel` set to `false` turn the sideways close off; other edge settings
+    don't apply. Tapping above or below the card pages, beside it closes. Cards don't
+    bounce at their ends (a bounce made the next swipe hard to recognise).
+
+  ```tsx
+  <ZoomProvider orientation="vertical" geometry={{ top: 8, bottom: 8, side: 8, gap: 8 }} ...>
+  ```
 - `hideGroupWhileOpen` — hide the whole group on the page while open (default true).
+- `groupOpacity` — instead of hiding the group, keep its other items on the page at this
+  opacity (e.g. `0.35`); only the visible item's own source is hidden. They follow the
+  visible card, dimming as it opens and returning to full as it lands. When the visible
+  item changes while open, its source fades out and the last one's fades back in.
+- `flyHome` — `"group"` (default): closing sends every card back to its own source.
+  `"visible"`: only the visible card flies home; the others stay where they are and fade
+  with it (and fade in with it on open). Pair it with `groupOpacity` for a calm close:
+
+  ```tsx
+  <ZoomProvider orientation="vertical" flyHome="visible" groupOpacity={0.35} ...>
+  ```
 - `closeButton` — `true`, `false`, or `(close) => <YourButton/>`.
 - `history` — off by default. `{ mode: "session" }`: opening adds one history entry,
   swiping only updates the address, Back closes (for sets people flick through,
@@ -193,6 +239,8 @@ npm test               # Playwright: builds the demo and harness, serves them, r
 
 - The hero flies as a copy with its computed styles frozen, so it looks the
   same outside the card. A playing video will show as its current frame.
+- A box-shadow on the hero element itself fades in as it opens and out as it closes,
+  since the source it flies from usually has none.
 - If source and hero have different aspect ratios, the copy is cropped to the
   source and opens out to the hero, so nothing stretches.
 - Every item in a group is rendered as a card while open. For very large
