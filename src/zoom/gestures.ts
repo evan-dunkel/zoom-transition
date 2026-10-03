@@ -1,7 +1,17 @@
 import { motionValue, type MotionValue } from "motion/react";
 import { REST, clamp, project, rubber, springTo } from "./springs";
 
-export type GestureLayout = { W: number; H: number; side: number; step: number; top: number; cardH: number; vertical: boolean };
+export type GestureLayout = {
+  W: number;
+  H: number;
+  side: number;
+  step: number;
+  top: number;
+  cardH: number;
+  vertical: boolean;
+  /** One natively scrolled column: no paging, sideways closes. */
+  stream: boolean;
+};
 
 export type ZoomVelocity = { vx: number; vy: number; vs: number };
 
@@ -201,6 +211,11 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
       };
       if (L0.vertical) {
         if (sideways && sidewaysOn(drag)) startDismiss(dx > 0 ? 1 : -1);
+        // A stream has no pages: vertical drags are the column's own scrolling.
+        else if (L0.stream) {
+          G.axis = "none";
+          return false;
+        }
         // At the top pulling down, or at the bottom pushing up: the previous or next page.
         else if (!sideways && ((dy > 0 && atTop) || (dy < 0 && atBottom))) startPaging();
         else if (!sideways && G.type === "touch" && scroller && (turning() || offCard(G.target))) {
@@ -706,7 +721,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
     if (c.layout().vertical) {
       if (sideways) onSidewaysWheel(e);
-      else onVerticalPagingWheel(e);
+      else if (!c.layout().stream) onVerticalPagingWheel(e); // a stream just scrolls
     } else if (sideways) onHorizontalWheel(e);
     else onVerticalWheel(e);
   };
@@ -731,6 +746,12 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     }
     if (phase !== "open" && phase !== "opening") return;
     if (target.closest("[data-zoom-close]")) {
+      c.close();
+      return;
+    }
+    if (c.layout().stream) {
+      // Every card in a stream is content; only a tap off all of them closes.
+      if (target.closest(".zoom-card")) return;
       c.close();
       return;
     }

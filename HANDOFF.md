@@ -214,6 +214,19 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
 - Paging: rubber band at ends, projection picks the page (±1), keyboard arrows
   page **also while opening** (flights follow the track), trackpad horizontal
   swipe pages once per swipe (40 px of travel).
+- Stream (`layout: "stream"`, `L.stream`, implies `L.vertical`): the cards render in a
+  `.zoom-stream` column (absolute, inset 0, the only scroller; flex column; padding
+  `top`, `rowGap` = gap) instead of the track; cards are `position: relative`, content
+  height, `overflow: clip` (so each card's sticky close bar sticks to the column), none
+  inert. `slot(j)` = the card's `offsetLeft/offsetTop` less the column's `scrollTop`
+  (so bake and transitionCards work unchanged); `trackAt` = 0; the open scrolls the
+  column so the card is at `top` (`scrollStreamTo`) and zooms from `slot(index)`.
+  A scroll listener (once per frame, only while open) makes the card under the top
+  third the visible one via `setIndex(i, quiet)`: no focus move or announcement, and
+  history replaces rather than pushes. `page(d)` scrolls instead (popstate). Flights
+  following scroll use the column (`scrollerOf`); their clip is the column's band.
+  Gestures: vertical drags and wheel are left native; sideways closes; a tap off every
+  card closes; arrows scroll. The column stops scrolling while dragged or closing.
 - Vertical pager (`orientation: "vertical"`): the axes swap. Drag axis is decided
   the same way (first move): sideways = dismiss (either direction, `G.dir` = ±1,
   pivot a third of the way down, span `W * 0.9`); vertical = paging, but only when
@@ -302,17 +315,21 @@ paging jumps; the group is hidden only once the fade-in completes.
 - Portfolio (`Portfolio.tsx`, content in `portfolioContent.ts`, all invented sample
   content): 4 projects (group "work", 4:3 tiles) and 5 pieces of writing (group
   "writing", 68 px square thumbnails opening into 16:9 heroes: the flight crops).
-  Same vertical feed settings, landing `{1, 0}` (hero lands exactly on the tile),
-  history `item`, cards in the page theme, 680 px wide on desktop. Each card is a long
-  read that scrolls; the end names the next piece ("Keep scrolling"), or offers a
-  way back on the last. Imagery is generated with CSS (`Art`, kinds like phones,
+  `layout: "stream"` (no paging: every piece at its content's height, one column),
+  `flyHome: "visible"`, `groupOpacity: 0.35`, history `session`, cards in the page
+  theme, 680 px wide on desktop. Like the books, the image sits on the card, inset over
+  a band tinted with its ground (`.pf-stage`), and the card grows out from behind it:
+  landing `{0.86, 0.05}`. Each piece ends by naming the next (it follows directly),
+  or offers a way back on the last. Imagery is generated with CSS (`Art`, kinds like phones,
   bars, tiles, shelf, spring). Fonts: Bricolage Grotesque (display), Newsreader
-  (reading). A "Moving between pieces" panel tunes `timing.page` (duration, bounce),
-  `paging.swipeDistance` and `paging.atEdge`, persisted in `portfolio-paging-v1`.
+  (reading).
+- The Feed tab has a "Moving between cards" panel (`PagingControls.tsx`) tuning
+  `timing.page` (duration, bounce), `paging.swipeDistance` and `paging.atEdge`,
+  persisted in `feed-paging-v1`. (It started on the portfolio, before that became a stream.)
 
 ## 6. Public API (summary)
 `ZoomProvider` props: `renderDestination`, `container`, `background`, `timing`,
-`timeScale`, `geometry`, `dim`, `scan`, `landing`, `dismiss`, `paging`, `orientation`,
+`timeScale`, `geometry`, `dim`, `scan`, `landing`, `dismiss`, `paging`, `layout`, `orientation`,
 `hideGroupWhileOpen`, `groupOpacity`, `flyHome`, `closeButton`, `history`, `debug`, `getLabel`, `closeLabel`.
 Components: `ZoomSource`, `ZoomHero` (`live`), `TemplateDestination`.
 Types include `ZoomDismiss` and `ZoomEdges` (per-edge `drag` / `wheel` settings).
@@ -369,10 +386,14 @@ See README for details.
   harness: scroll unlock, no sideways shift with scrollbars, cleanup on unmount.
   `feed.spec.ts` covers the vertical pager: layout, arrows, wheel and touch paging,
   content scrolling before paging, sideways touch/mouse/wheel close, Escape and X,
-  the dimmed group, and only the visible card flying home. `portfolio.spec.ts`: reading
-  then paging at the end, item history, separate feeds, the way back from the last piece.
-  `portfolio-paging.spec.ts`: scrolling over the card being left mid page turn (both
-  directions, wheel and touch) scrolls the new card; swipe distance; `atEdge` modes.
+  the dimmed group, and only the visible card flying home. `pager-paging.spec.ts`
+  (Feed tab, cards made long with injected content): scrolling over the card being
+  left mid page turn (both directions, wheel and touch, also where "instant" throws),
+  new swipes during momentum, quick flicks reading on, swipe distance, `atEdge` modes,
+  no bounce. `portfolio.spec.ts` (stream): content-height cards in one column, scrolling
+  straight through pieces with nothing cancelled, the sticky close button, only the
+  piece being read flying home, the card growing from behind the image, touch/wheel
+  close, writing as its own stream, Back.
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
   the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).

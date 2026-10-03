@@ -47,6 +47,27 @@
    new swipe there was hard to tell from the old one and the page wouldn't turn. */
 .zoom-vertical .zoom-card-scroll { overscroll-behavior-y: none; }
 
+/* Stream (layout="stream"): one natively scrolled column of cards, each as tall as its
+   content. The cards sit in the column's flow; the column is the only scroller, so
+   each card's close bar sticks to the top of the screen while that card is in view. */
+.zoom-stream {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.zoom-stream::-webkit-scrollbar { display: none; }
+.zoom-stream .zoom-card { position: relative; flex: none; overflow: clip; }
+.zoom-stream .zoom-card-scroll { height: auto; overflow: visible; }
+/* Hold still while a card is pulled sideways, and while cards fly home. */
+.zoom-dragging .zoom-stream,
+.zoom-root[data-phase="closing"] .zoom-stream { overflow-y: hidden; }
+
 .zoom-close {
   position: absolute;
   top: 14px;

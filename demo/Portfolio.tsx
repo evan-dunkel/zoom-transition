@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ZoomHero, ZoomProvider, ZoomSource, useZoom, useZoomItem, type ZoomPaging } from "../src/zoom";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ZoomHero, ZoomProvider, ZoomSource, useZoom, useZoomItem } from "../src/zoom";
 import {
   PROJECTS,
   PROJECT_BY_ID,
@@ -11,10 +11,12 @@ import {
   type Writing,
 } from "./portfolioContent";
 
-// The third prototype: the feed adapted to a design portfolio. Projects and
-// writing are two feeds. Each card is a long read that scrolls like a page; at the
-// end, a fresh swipe brings up the next piece. Sideways, Escape or ✕ closes, and
-// only the piece you were reading flies back to its spot on the index.
+// The third prototype: a design portfolio. Projects and writing open into two
+// continuous streams: every piece is a card as tall as its content, one after
+// another, scrolled like a document with nothing to page or push through. The
+// image sits on the card like the books' covers do, and the card grows out from
+// behind it. Sideways, Escape or ✕ closes, and only the piece you're reading flies
+// back to its spot on the index.
 
 const WORK = "work";
 const NOTES = "writing";
@@ -236,9 +238,11 @@ function ProjectPage({ p }: { p: Project }) {
   const { index } = useZoomItem();
   return (
     <article className="pf-page">
-      <ZoomHero className="pf-hero pf-hero-work">
-        <Art a={p.art} />
-      </ZoomHero>
+      <div className="pf-stage" style={{ "--tint": p.art.c[0] } as CSSProperties}>
+        <ZoomHero className="pf-hero pf-hero-work">
+          <Art a={p.art} />
+        </ZoomHero>
+      </div>
       <div className="pf-text">
         <p className="pf-eyebrow">
           Project {index + 1} of {PROJECTS.length} · {p.year}
@@ -265,9 +269,11 @@ function WritingPage({ w }: { w: Writing }) {
   const { index } = useZoomItem();
   return (
     <article className="pf-page">
-      <ZoomHero className="pf-hero pf-hero-note">
-        <Art a={w.art} />
-      </ZoomHero>
+      <div className="pf-stage" style={{ "--tint": w.art.c[0] } as CSSProperties}>
+        <ZoomHero className="pf-hero pf-hero-note">
+          <Art a={w.art} />
+        </ZoomHero>
+      </div>
       <div className="pf-text">
         <p className="pf-eyebrow">
           {w.kind} · {w.date} · {w.minutes} min read
@@ -289,80 +295,34 @@ function Destination({ id }: { id: string }) {
   return <WritingPage w={WRITING_BY_ID.get(id)!} />;
 }
 
-/* ------------------------------------------------------------------ paging controls */
-
-type PagingTuning = { duration: number; bounce: number; swipe: number; atEdge: ZoomPaging["atEdge"] };
-const PAGING_DEFAULTS: PagingTuning = { duration: 0.5, bounce: 0, swipe: 40, atEdge: "new-swipe" };
-const PAGING_KEY = "portfolio-paging-v1";
-const num = (v: string, fallback: number, min: number, max: number) => {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
-};
-function loadPaging(): Record<keyof PagingTuning, string> {
-  let saved: Partial<PagingTuning> = {};
-  try {
-    saved = JSON.parse(localStorage.getItem(PAGING_KEY) || "null") ?? {};
-  } catch {}
-  const t = { ...PAGING_DEFAULTS, ...saved };
-  return { duration: String(t.duration), bounce: String(t.bounce), swipe: String(t.swipe), atEdge: t.atEdge };
-}
-
 /* ------------------------------------------------------------------ app */
 
 export function Portfolio({ switcher }: { switcher?: ReactNode }) {
   const phoneRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLElement>(null);
   const [slow, setSlow] = useState(false);
-  const [fields, setFields] = useState(loadPaging);
-  const tuning: PagingTuning = {
-    duration: num(fields.duration, PAGING_DEFAULTS.duration, 0.1, 2),
-    bounce: num(fields.bounce, PAGING_DEFAULTS.bounce, 0, 0.6),
-    swipe: num(fields.swipe, PAGING_DEFAULTS.swipe, 4, 400),
-    atEdge: fields.atEdge === "continue" ? "continue" : "new-swipe",
-  };
-  const update = (key: keyof PagingTuning, value: string) => {
-    const next = { ...fields, [key]: value };
-    setFields(next);
-    try {
-      localStorage.setItem(
-        PAGING_KEY,
-        JSON.stringify({
-          duration: num(next.duration, PAGING_DEFAULTS.duration, 0.1, 2),
-          bounce: num(next.bounce, PAGING_DEFAULTS.bounce, 0, 0.6),
-          swipe: num(next.swipe, PAGING_DEFAULTS.swipe, 4, 400),
-          atEdge: next.atEdge,
-        }),
-      );
-    } catch {}
-  };
-  const reset = () => {
-    setFields({ duration: "0.5", bounce: "0", swipe: "40", atEdge: "new-swipe" });
-    try {
-      localStorage.removeItem(PAGING_KEY);
-    } catch {}
-  };
-  const timing = useMemo(() => ({ page: { duration: tuning.duration, bounce: tuning.bounce } }), [tuning.duration, tuning.bounce]);
-  const paging = useMemo(() => ({ swipeDistance: tuning.swipe, atEdge: tuning.atEdge }), [tuning.swipe, tuning.atEdge]);
+
   const compact = () => window.matchMedia("(max-width: 540px)").matches;
   return (
     <div className="stage">
       <div className="phone portfolio" ref={phoneRef}>
         <ZoomProvider
-          orientation="vertical"
+          layout="stream"
           flyHome="visible"
           groupOpacity={0.35}
-          timing={timing}
-          paging={paging}
+          // Like the books: the card starts a little narrower than the image, just
+          // behind it, and grows out from there.
+          landing={{ widthRatio: 0.86, topOffset: 0.05 }}
           container={() => phoneRef.current}
           background={() => pageRef.current}
           renderDestination={(id) => <Destination id={id} />}
-          history={{ mode: "item" }}
+          history={{ mode: "session" }}
           getLabel={(id) => PROJECT_BY_ID.get(id)?.title ?? WRITING_BY_ID.get(id)?.title ?? id}
           timeScale={slow ? 0.2 : 1}
           geometry={() =>
             compact()
-              ? { top: 8, bottom: 8, side: 8, gap: 8 }
-              : { top: 24, bottom: 24, side: 18, gap: 12, maxCardWidth: 680 }
+              ? { top: 8, bottom: 8, side: 8, gap: 12 }
+              : { top: 24, bottom: 24, side: 18, gap: 20, maxCardWidth: 680 }
           }
           dim={() => parseFloat(getComputedStyle(phoneRef.current!).getPropertyValue("--dim-max")) || 0.3}
         >
@@ -379,34 +339,9 @@ export function Portfolio({ switcher }: { switcher?: ReactNode }) {
               systems behind them.
             </p>
             <p className="hint">
-              Sample portfolio. Open a project or a piece of writing and scroll to read. Keep scrolling at the end for
-              the next one; swipe sideways to close.
+              Sample portfolio. Open a project or a piece of writing and keep scrolling: the next one follows. Swipe
+              sideways, press Esc or ✕ to close.
             </p>
-            <fieldset className="tune pf-tune">
-              <legend>Moving between pieces</legend>
-              <label>
-                Page turn{" "}
-                <input id="pf-duration" type="number" inputMode="decimal" min={0.1} max={2} step={0.05} value={fields.duration} onChange={(e) => update("duration", e.target.value)} /> s
-              </label>
-              <label>
-                Bounce{" "}
-                <input id="pf-bounce" type="number" inputMode="decimal" min={0} max={0.6} step={0.05} value={fields.bounce} onChange={(e) => update("bounce", e.target.value)} />
-              </label>
-              <label>
-                Swipe to turn{" "}
-                <input id="pf-swipe" type="number" inputMode="numeric" min={4} max={400} step={5} value={fields.swipe} onChange={(e) => update("swipe", e.target.value)} /> px
-              </label>
-              <label>
-                At the end
-                <select id="pf-edge" value={fields.atEdge} onChange={(e) => update("atEdge", e.target.value)}>
-                  <option value="new-swipe">Stop; a new swipe turns</option>
-                  <option value="continue">Keep going: one stream</option>
-                </select>
-              </label>
-              <button type="button" className="pf-reset" onClick={reset}>
-                Reset
-              </button>
-            </fieldset>
             <Index />
           </main>
         </ZoomProvider>

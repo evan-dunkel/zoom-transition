@@ -19,7 +19,8 @@ and closing sends every card back to its own source.
   - `zoom.css` — required styles; theme with the `--zoom-*` properties
 - `demo/` — three prototypes: the Book Store as shelves that page sideways
   (`BookStore.tsx`), the Book Store as a feed that pages up and down (`BookFeed.tsx`),
-  and that feed adapted to a design portfolio of long reads (`Portfolio.tsx`)
+  and a design portfolio of long reads that opens into one continuous stream
+  (`Portfolio.tsx`)
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.
@@ -161,7 +162,17 @@ React island, or keep the markup in Astro and use one small island with `scan`
   swipe turns the page; `"continue"` turns it straight away and lets the swipe carry
   on into the next card's content, so the cards read as one continuous stream. How quickly a page turn
   settles is `timing.page` (default 0.5 s, no bounce).
-- `orientation` — how a group's cards are laid out and swiped through:
+- `layout` — `"pager"` (default) or `"stream"`. A stream lays a group's cards out as one
+  continuous column, each card as tall as its content, scrolled natively like a document:
+  no paging, nothing to push through between pieces. The card under the top third of the
+  screen is the visible one (its source is the hidden one, and it's the one that flies
+  home). Close with the close button (it stays in view while reading), Escape, or by
+  dragging or scrolling sideways. Made for long reads (case studies, essays):
+
+  ```tsx
+  <ZoomProvider layout="stream" flyHome="visible" groupOpacity={0.35} ...>
+  ```
+- `orientation` — how a pager's cards are laid out and swiped through:
   - `"horizontal"` (default): side by side. Swipe sideways to page; pull down to close.
   - `"vertical"`: stacked like a feed, one card per page. Swipe, drag or scroll up and
     down to page (Up/Down arrows too); drag or scroll a card sideways, either way, to

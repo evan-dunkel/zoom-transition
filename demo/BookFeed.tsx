@@ -2,6 +2,7 @@ import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ZoomProvider, ZoomSource, useZoom, useZoomItem } from "../src/zoom";
 import { BOOKS, bookId, type Book } from "./books";
 import { BookHero, Cover, type HeroMode } from "./BookParts";
+import { PagingControls, usePagingTuning } from "./PagingControls";
 
 // The second prototype: every book in one vertical feed. The store is a grid of
 // covers; a cover opens into a full-height card, and the feed pages up and down
@@ -96,6 +97,7 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
   const storeRef = useRef<HTMLElement>(null);
   const [slow, setSlow] = useState(false);
   const [heroMode, setHeroMode] = useState<HeroMode>("synced");
+  const paging = usePagingTuning("feed-paging-v1");
   const compact = () => window.matchMedia("(max-width: 540px)").matches;
 
   return (
@@ -105,6 +107,8 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
           orientation="vertical"
           // Calm close: only the visible book flies home; the grid stays behind, dimmed.
           flyHome="visible"
+          timing={paging.timing}
+          paging={paging.paging}
           groupOpacity={0.35}
           container={() => phoneRef.current}
           background={() => storeRef.current}
@@ -139,6 +143,7 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
                 </select>
               </label>
             </div>
+            <PagingControls tuning={paging} />
             <Grid />
           </main>
         </ZoomProvider>

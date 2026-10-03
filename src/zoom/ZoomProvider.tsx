@@ -157,6 +157,17 @@ export type ZoomProviderProps = {
    *   content still scrolls first; paging takes over at its top and bottom.
    */
   orientation?: "horizontal" | "vertical";
+  /**
+   * How a group's cards are arranged while open.
+   * - "pager" (default): one card per page, each the height of the screen; swipe to
+   *   page (see orientation).
+   * - "stream": one continuous column, each card as tall as its content, scrolled
+   *   natively like a document. No paging: the visible card is whichever sits under
+   *   the top third of the screen, and that's the one that flies home on close.
+   *   Close with the close button (it stays in view), Escape, or by dragging or
+   *   scrolling sideways.
+   */
+  layout?: "pager" | "stream";
   /** While open, hide every item of the group on the page (not just the visible one), so
    *  nothing shows twice in the gaps between cards. Default true. */
   hideGroupWhileOpen?: boolean;
@@ -207,6 +218,8 @@ type Layout = {
   cardH: number;
   /** Cards are stacked top to bottom and the track moves vertically. */
   vertical: boolean;
+  /** One natively scrolled column of content-height cards (implies vertical). */
+  stream: boolean;
 };
 type SourceEntry = { id: string; group: string; el: HTMLElement };
 type CardValues = { x: MotionValue<number>; y: MotionValue<number>; s: MotionValue<number>; o: MotionValue<number> };
@@ -485,12 +498,17 @@ const ZoomCard = memo(function ZoomCard({
       className="zoom-card"
       data-zoom-id={id}
       aria-label={label}
-      inert={!active}
+      inert={!active && !layout.stream}
       style={{
-        left: layout.vertical ? layout.side : j * layout.step,
-        top: layout.vertical ? j * layout.step : layout.top,
+        // In a stream, cards sit in the column's own flow at their content's height.
+        ...(layout.stream
+          ? {}
+          : {
+              left: layout.vertical ? layout.side : j * layout.step,
+              top: layout.vertical ? j * layout.step : layout.top,
+              height: layout.cardH,
+            }),
         width: layout.cardW,
-        height: layout.cardH,
         x: v.x,
         y: v.y,
         scale: v.s,
@@ -534,6 +552,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const zoomerRef = useRef<HTMLDivElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
   const flightRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
 
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [session, setSession] = useState<{ ids: string[]; key: number } | null>(null);
@@ -704,11 +723,15 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.histDepth += 1;
     window.history.pushState({ zoom: id, depth: S.histDepth }, "", urlFor(id));
   };
-  /** The visible item changed: a new entry ("item" mode) or just a new address ("session" mode). */
-  const recordPage = (id: string) => {
+  /**
+   * The visible item changed: a new entry ("item" mode) or just a new address ("session"
+   * mode). Scrolling a stream only ever updates the address: an entry per piece
+   * scrolled past would make Back crawl.
+   */
+  const recordPage = (id: string, replace = false) => {
     const h = historyOption();
     if (!h || S.fromPop || S.histDepth === 0) return;
-    if (h.mode === "item") {
+    if (h.mode === "item" && !replace) {
       S.histDepth += 1;
       window.history.pushState({ zoom: id, depth: S.histDepth }, "", urlFor(id));
     } else {
@@ -746,15 +769,31 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const cardW = Math.min(W - geo.side * 2, geo.maxCardWidth);
     const side = (W - cardW) / 2;
     const cardH = H - geo.top - geo.bottom;
-    const vertical = latest.current.orientation === "vertical";
-    return { W, H, side, gap: geo.gap, cardW, step: (vertical ? cardH : cardW) + geo.gap, top: geo.top, cardH, vertical };
+    const stream = latest.current.layout === "stream";
+    const vertical = stream || latest.current.orientation === "vertical";
+    return { W, H, side, gap: geo.gap, cardW, step: (vertical ? cardH : cardW) + geo.gap, top: geo.top, cardH, vertical, stream };
   };
   /** Where the track sits when page i is the visible one. */
-  const trackAt = (i: number) => (S.L!.vertical ? S.L!.top : S.L!.side) - i * S.L!.step;
+  const trackAt = (i: number) => (S.L!.stream ? 0 : (S.L!.vertical ? S.L!.top : S.L!.side) - i * S.L!.step);
   /** Card j's untransformed top-left, in the root, with the track at `t`. */
   const slot = (j: number, t = track.get()) => {
     const L = S.L!;
+    if (L.stream) {
+      // Where the column's flow puts it, less how far the column is scrolled.
+      const card = cardEls.current.get(S.ids[j]);
+      const sc = streamRef.current;
+      return { x: card?.offsetLeft ?? L.side, y: (card?.offsetTop ?? 0) - (sc?.scrollTop ?? 0) };
+    }
     return L.vertical ? { x: L.side, y: t + j * L.step } : { x: t + j * L.step, y: L.top };
+  };
+  /** Stream: scroll the column so card j's top sits at the layout's top (as far as it can). */
+  const scrollStreamTo = (j: number, smooth = false) => {
+    const sc = streamRef.current;
+    const card = cardEls.current.get(S.ids[j]);
+    if (!sc || !card) return;
+    const top = Math.max(0, card.offsetTop - S.L!.top);
+    if (smooth) sc.scrollTo({ top, behavior: "smooth" });
+    else sc.scrollTop = top;
   };
   /** A movement of the track, as screen x/y. */
   const alongTrack = (d: number) => (S.L!.vertical ? { x: 0, y: d } : { x: d, y: 0 });
@@ -826,7 +865,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const liveKey = useRef(0);
   /** The card's scroller, for following content scrolled while the hero is in flight. */
-  const scrollerOf = (id: string) => cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-card-scroll") ?? null;
+  const scrollerOf = (id: string) =>
+    S.L?.stream ? streamRef.current : cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-card-scroll") ?? null;
   function startFlight(
     it: Item,
     hero: HTMLElement,
@@ -862,6 +902,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       // whatever has scrolled past the card's top or bottom edge, like the rest of it.
       clip: () => {
         if (it.flightScroll0 === null || it.flightScrollNow === it.flightScroll0 || !S.L) return null;
+        if (S.L.stream) return { top: zy.get(), bottom: zy.get() + zs.get() * S.L.H };
         const top = zy.get() + zs.get() * (slot(it.j).y + it.cv.y.get());
         return { top, bottom: top + zs.get() * it.cv.s.get() * S.L.cardH };
       },
@@ -1120,6 +1161,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
       if (el) getItem(other, j).sLand = zoomOnto(rel(el.getBoundingClientRect()), 0, 0).s;
     });
 
+    // A stream opens scrolled to this item's card (as near the top as the column allows).
+    if (L.stream) scrollStreamTo(S.index);
+    const at = slot(S.index);
+
     // Measure at full size first, before the zoom is applied (and before any writes).
     const card = cardEls.current.get(id)!;
     const hero = heroFor(id);
@@ -1129,10 +1174,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (hero) {
       const hr = hero.getBoundingClientRect();
       const cr = card.getBoundingClientRect();
-      heroTarget = { x: L.side + (hr.left - cr.left), y: L.top + (hr.top - cr.top), w: hr.width, h: hr.height };
+      heroTarget = { x: at.x + (hr.left - cr.left), y: at.y + (hr.top - cr.top), w: hr.width, h: hr.height };
     }
 
-    const z = zoomOnto(src, L.side, L.top);
+    const z = zoomOnto(src, at.x, at.y);
     S.s0 = z.s;
     zx.jump(z.x);
     zy.jump(z.y);
@@ -1172,6 +1217,35 @@ export function ZoomProvider(props: ZoomProviderProps) {
     });
   }, [session]);
 
+  // Stream: the visible card is the one under the top third of the column. Follows the
+  // reader's scrolling (once per frame), moving which source is hidden, which card
+  // closes, and the address.
+  useEffect(() => {
+    const sc = streamRef.current;
+    if (!session || !sc) return;
+    let raf = 0;
+    const pick = () => {
+      raf = 0;
+      if (S.phase !== "open") return;
+      const box = sc.getBoundingClientRect();
+      const line = box.top + box.height / 3;
+      let best = S.index;
+      S.ids.forEach((id, j) => {
+        const r = cardEls.current.get(id)?.getBoundingClientRect();
+        if (r && r.top <= line && r.bottom > line) best = j;
+      });
+      if (best !== S.index) setIndex(best, true);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(pick);
+    };
+    sc.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      sc.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, [session, layout?.stream]);
+
   // Static heroes fly as a frozen snapshot, which is slow to build. Build it while
   // nothing is moving, so closing (often mid-gesture) doesn't have to.
   const prefreezeStaticHeroes = () => {
@@ -1207,12 +1281,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   /* -------------------------------------------------------------- paging */
 
-  const setIndex = (i: number) => {
-    S.refocus = !!rootRef.current?.contains(document.activeElement);
+  /** quiet: the visible card changed because the reader scrolled a stream: no focus move, no announcement. */
+  const setIndex = (i: number, quiet = false) => {
+    S.refocus = !quiet && !!rootRef.current?.contains(document.activeElement);
     const previous = S.index;
     S.index = i;
     if (previous !== i && (S.phase === "open" || S.phase === "opening")) {
-      recordPage(S.ids[i]);
+      recordPage(S.ids[i], quiet);
       const prevId = S.ids[previous];
       if (prevId) emit(getItem(prevId, previous), "deactivated");
       emit(getItem(S.ids[i], i), "activated");
@@ -1221,6 +1296,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if ((S.phase === "open" || S.phase === "opening") && S.groupOpacity !== null) hideForOpen();
     if (S.flyVisible) followVisible();
     setIndexState(i);
+    if (quiet) return;
     const label = latest.current.getLabel?.(S.ids[i]) ?? S.ids[i];
     setAnnounce(`${label}, ${i + 1} of ${S.ids.length}`);
   };
@@ -1235,6 +1311,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const page = (d: number) => {
     if (S.phase !== "open" && S.phase !== "opening") return;
     const i = clamp(S.index + d, 0, S.ids.length - 1);
+    if (S.L?.stream) {
+      // No pages to turn: bring that card to the top (Back and Forward in "item" history).
+      if (i !== S.index) scrollStreamTo(i, !S.reduced);
+      return;
+    }
     if (i === S.index) {
       // At the end: a small push into the edge, then settle back.
       if (!S.reduced) springTo(track, trackAt(i), timing().page, { velocity: -d * 500, speed: speed() });
@@ -1643,6 +1724,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         return;
       }
       if (S.phase !== "open" && S.phase !== "opening") return; // arrows can interrupt an opening
+      if (S.L?.stream) return; // arrows scroll the column
       const [back, next] = S.L?.vertical ? ["ArrowUp", "ArrowDown"] : ["ArrowLeft", "ArrowRight"];
       if (e.key === next) {
         e.preventDefault();
@@ -1806,7 +1888,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
     createPortal(
       <div
         ref={rootRef}
-        className={["zoom-root", fixed && "zoom-fixed", layout?.vertical && "zoom-vertical"].filter(Boolean).join(" ")}
+        className={["zoom-root", fixed && "zoom-fixed", layout?.vertical && "zoom-vertical", layout?.stream && "zoom-streaming"]
+          .filter(Boolean)
+          .join(" ")}
         role="dialog"
         aria-modal="true"
       >
@@ -1815,8 +1899,15 @@ export function ZoomProvider(props: ZoomProviderProps) {
           {session && layout && (
             <motion.div
               key={session.key}
-              className="zoom-track"
-              style={layout.vertical ? { y: track } : { x: track }}
+              ref={layout.stream ? streamRef : undefined}
+              className={layout.stream ? "zoom-stream" : "zoom-track"}
+              style={
+                layout.stream
+                  ? { paddingTop: layout.top, paddingBottom: layout.top, rowGap: layout.gap }
+                  : layout.vertical
+                    ? { y: track }
+                    : { x: track }
+              }
             >
               {session.ids.map((id, j) => (
                 <ZoomCard

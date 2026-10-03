@@ -277,7 +277,12 @@ button { font: inherit; color: inherit; }
 
 /* A piece, open */
 .pf-page { padding-bottom: 8px; }
-.pf-hero { position: relative; display: block; overflow: hidden; border-radius: var(--zoom-card-radius) var(--zoom-card-radius) 0 0; }
+/* The image sits on the card, inset over a band tinted with its own ground, like a
+   book's cover; the card grows out from behind it as it opens. */
+.pf-stage { padding: 20px 20px 4px; background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 26%, var(--card)) 0%, var(--card) 88%); }
+.pf-hero { position: relative; display: block; overflow: hidden; border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.pf-hero-note { border-radius: 12px; }
+@media (max-width: 540px) { .pf-stage { padding: 14px 14px 2px; } }
 .pf-hero-work { aspect-ratio: 4 / 3; }
 .pf-hero-note { aspect-ratio: 16 / 9; }
 .pf-text { max-width: 620px; margin: 0 auto; padding: 22px 22px 0; }
@@ -350,6 +355,6 @@ button { font: inherit; color: inherit; }
 .art-draft { color: #1c1c1e; }
 .art-draft[style*="#1c1c1e"] { color: #f5f5f7; }
 .pf-section { max-width: 980px; }
-.pf-tune { margin: 16px 20px 0; border: 0; max-width: 940px; }
-.pf-tune legend { float: left; width: 100%; margin-bottom: 2px; padding: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text2); }
-.pf-reset { height: 32px; padding: 0 12px; border: 1px solid var(--sep); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer; }
+.paging-tune { margin: 16px 20px 0; border: 0; max-width: 940px; }
+.paging-tune legend { float: left; width: 100%; margin-bottom: 2px; padding: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text2); }
+.paging-reset { height: 32px; padding: 0 12px; border: 1px solid var(--sep); border-radius: 8px; background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer; }
