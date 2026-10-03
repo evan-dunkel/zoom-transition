@@ -18,6 +18,9 @@ API guide; this file is the "how it works, why, and what's left" companion.
   pager; closing sends every card back to its own slot.
 - The live demo is the "Book Store" (`demo/`), published as a claude.ai artifact.
   It is a single page that fills the window; `.phone` (no longer drawn as a phone) is the `container`.
+  A Shelves / Feed / Portfolio switch picks one of three prototypes: shelves paging
+  sideways (the original), a grid of every book opening into a vertical, TikTok-style
+  feed, and the feed adapted to a sample design portfolio (projects + writing).
 
 ## 2. Repository layout
 
@@ -32,7 +35,11 @@ src/zoom/            the library (copy into a project)
   TemplateDestination.tsx  destination from <template data-zoom-destination="id">
   zoom.css           required styles + debug styles; theme with --zoom-* vars
   index.ts           public exports
-demo/                Book Store demo (BookStore.tsx, books.ts, demo.css, main.tsx)
+demo/                main.tsx (layout switch), BookStore.tsx (shelves), BookFeed.tsx (vertical
+                     feed), BookParts.tsx (covers, 3D book), books.ts, Portfolio.tsx +
+                     portfolioContent.ts (portfolio prototype), demo.css
+standalone/portfolio/ the portfolio at its simplest (plain HTML + templates + one island), built
+                     to dist/portfolio.html by its build.py; the reference for mapping onto a site
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
 tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)
@@ -71,10 +78,10 @@ project tile, it's library; if it mentions books, it's app.
 
 ### Two motion "modes" (in `S.mode`)
 - **zoom**: one transform on the whole pager (`zx`, `zy`, `zs` on `.zoom-zoomer`,
-  origin 0 0) + `trackX` on `.zoom-track`. Used for the first open from idle,
+  origin 0 0) + `track` on `.zoom-track` (its x, or its y in a vertical pager). Used for the first open from idle,
   the resting open state, drag-to-dismiss, cancel.
 - **cards**: each card has its own `cv.x/y/s/o` (origin 0 0, relative to its
-  untransformed slot `P = (trackX + j*step, L.top)`). Used for closing and
+  untransformed slot `P = slot(j)`: `(track + j*step, L.top)`, or `(L.side, track + j*step)` vertically). Used for closing and
   turning transitions around.
 - `bake(zoomVelocity?)` folds the zoom (and the track) into each card's values,
   **preserving on-screen position and velocity** (product rule), then resets the
@@ -105,9 +112,15 @@ behind is live and a tap can reopen).
   `cx, cy, s` (centre + uniform scale). `fit(rect)` = cover-fit scale + crop
   insets, so a square source can open into a wide hero without stretching.
 - `retarget(rect)` re-bases from the current state (springs keep velocity).
+- Shadow: the hero element's own `box-shadow` (read in `measureHero`) is moved off the
+  copy onto a `.zoom-clone-shadow` layer behind it, whose opacity follows the item's
+  `progress` (`shadowOpacity`). Sources rarely have the hero's shadow, so carried at
+  full strength it popped on at take-off and off at landing; now it fades in with the
+  open and out with the close, continuously through reversals. Only the hero's own
+  shadow; shadows on elements inside it fly as they are.
 - `offset()` (added every frame): follows **content scrolled mid-flight**
   (`y = -(scrollNow - scroll0) * zs * cv.s`) and **paging mid-flight**
-  (`x = (trackX - track0) * zs`), so the hand-over is pixel-exact.
+  (`(track - track0) * zs` along the pager's axis), so the hand-over is pixel-exact.
   Scroll positions are read only in scroll events (`flightScrollNow`), never mid-frame.
 - `clip()` band: once following scrolled content, cut at the card's top/bottom.
 - Clip-path rule: only clip sides meant to be clipped; other sides use
@@ -153,6 +166,22 @@ behind is live and a tap can reopen).
 ### Sources on the page
 - While open, the whole group is hidden on the page (`hideGroupWhileOpen`,
   default true); during close every source stays hidden until its card lands.
+- `groupOpacity` (captured per session in `S.groupOpacity`): the visible item's source
+  gets `data-zoom-hidden`, the others `data-zoom-dimmed` with `--zoom-group-opacity`
+  (CSS in zoom.css). `followVisible()`, called from `updateDerived`, sets the variable
+  to `1 − (1 − g) · p` where p is the visible card's progress (the fade with reduced
+  motion), so the group dims as a card opens and returns as it lands. `markGroup` /
+  `unmarkGroup` apply and clean up. Each source also has a share (`presenceOf(id)`, a
+  motion value multiplied in): 0 for the visible item's, 1 for the rest. When the
+  visible item changes while open (a page turn, or scrolling a stream on), `swapVisible`
+  springs the two shares (timing.fade) so one tile fades out as the other fades back
+  in, instead of a hard hide snapping across. Opening still hides the visible source
+  outright (`data-zoom-hidden`), since its flight lifts off exactly over it; a landing
+  card's source gets its share back at once.
+- `flyHome: "visible"` (`S.flyVisible`): in `transitionCards`, cards other than the
+  visible one don't fly. Closing leaves them where the bake put them; reopening
+  springs them back to their slots. `followVisible()` sets their `cv.o` to p², so they
+  fade in on open, fade under a dismiss drag, and fade out on close.
 - `revealSource` only scrolls if the active source is cut off, **never toggles
   scroll-snap** (re-enabling snap caused a ~10 px jump after landing in Safari).
 - Sources ordered by DOM position (`compareDocumentPosition`).
@@ -199,10 +228,51 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
 - Paging: rubber band at ends, projection picks the page (±1), keyboard arrows
   page **also while opening** (flights follow the track), trackpad horizontal
   swipe pages once per swipe (40 px of travel).
+- Stream (`layout: "stream"`, `L.stream`, implies `L.vertical`): the cards render in a
+  `.zoom-stream` column (absolute, inset 0, the only scroller; flex column; padding
+  `top`, `rowGap` = gap) instead of the track; cards are `position: relative`, content
+  height, `overflow: clip` (so each card's sticky close bar sticks to the column), none
+  inert. `slot(j)` = the card's `offsetLeft/offsetTop` less the column's `scrollTop`
+  (so bake and transitionCards work unchanged); `trackAt` = 0; the open scrolls the
+  column so the card is at `top` (`scrollStreamTo`) and zooms from `slot(index)`.
+  A scroll listener (once per frame, only while open) makes the card under the top
+  third the visible one via `setIndex(i, quiet)`: no focus move or announcement, and
+  history replaces rather than pushes. `page(d)` scrolls instead (popstate). Flights
+  following scroll use the column (`scrollerOf`); their clip is the column's band.
+  Gestures: vertical drags and wheel are left native; sideways closes; a tap off every
+  card closes; arrows scroll. The column stops scrolling while dragged or closing.
+- Vertical pager (`orientation: "vertical"`): the axes swap. Drag axis is decided
+  the same way (first move): sideways = dismiss (either direction, `G.dir` = ±1,
+  pivot a third of the way down, span `W * 0.9`); vertical = paging, but only when
+  the card's content is at that edge (else native scroll). Wheel: vertical swipes
+  page once the content is at an edge, armed exactly like wheel dismiss
+  (`armEdges`, shared), and a page turn's momentum is swallowed (`pageTail`) so it
+  can't scroll the new card. `paging.atEdge: "continue"` skips the arming (reaching the
+  edge pages at once) and the tail (the swipe carries on into the new card: one stream); `paging.swipeDistance` replaces the old fixed 40 px. Scrolling
+  off the visible card (the inert card being left mid page turn, a gap, the backdrop)
+  scrolls the visible card by hand (`offCard`): inert cards aren't hit-testable, so
+  native scrolling there did nothing until the new card slid under the pointer, which
+  felt like waiting for the page turn (worst paging up with the pointer low). Touch:
+  a vertical drag that lands off the card gets axis "scroll" and drives `scrollTop`,
+  then glides with UIScrollView deceleration (`glideScroll`). While a page turn is still
+  settling (`turning()`), every vertical scroll goes to the new card by hand, wherever the
+  pointer is. Manual scrolling uses plain `scrollTop` (older Safari throws on behavior
+  "instant"; restarting a smooth scroll per event barely moves).
+  Edges: cards in a vertical pager have `overscroll-behavior-y: none` (root class
+  `zoom-vertical`), and paging arms with `armEdges(..., eager)`: a new swipe is any clear
+  rise in speed at the edge (step ≥ min·1.5 + 4), not dip-to-near-zero-then-rise.
+  Previously a swipe made while the last one's momentum (or the browser's bounce) was
+  still running at the edge never counted, so the page was hard to turn. Dismiss arming
+  (horizontal pager) is unchanged. Sideways swipes pull the card (same `pull` spring and
+  `pullBy`/`commitWheelDismiss`, mapped to x). Edge settings collapse to on/off
+  (`sidewaysOn`). Debug edge zones aren't drawn.
 - `swipeTail()` follows a swipe that has already acted (turned a page, closed the
   card) so its leftover momentum is ignored but a **new swipe acts at once**, even
-  mid-momentum: speed dipping ≤ DIP then rising (fingers back down), or QUIET_MS of
-  quiet. Movement the other way is never part of the tail (so swiping back turns
+  mid-momentum: once the swipe has started slowing (two falls in a row), any clear
+  rise (step ≥ min·1.5 + 4) is a new swipe; before that only speed dipping ≤ DIP then
+  rising counts (the swipe is often still speeding up when it turns the page, and that
+  mustn't read as new); or QUIET_MS of quiet. The dip-only rule swallowed quick flicks
+  in a row after a page turn until the reader paused. Movement the other way is never part of the tail (so swiping back turns
   back) but doesn't end it. Used by trackpad paging and by the post-dismiss
   momentum swallowing. Previously both locks were extended by every event, so they
   held until macOS stopped sending events, i.e. until the pointer moved.
@@ -235,7 +305,7 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
 Open/close become opacity fades; no flights; `progress` reads 1; keyboard
 paging jumps; the group is hidden only once the fade-in completes.
 
-## 5. Demo specifics (`demo/BookStore.tsx`)
+## 5. Demo specifics (`demo/`)
 - Tuned values (also library defaults where applicable): open 0.5 s / bounce
   0.15; close 1.75× faster (≈0.29 s) / bounce 0.15; landing `{0.86, 0.1}`;
   edge zone 32 px. Tuning panel persists in localStorage key
@@ -248,11 +318,33 @@ paging jumps; the group is hidden only once the fade-in completes.
   (`timeScale` 0.2).
 - Book is a CSS 3D model: `.book3d` (perspective) > page + `.front`
   (preserve-3d, front/back faces). Covers are generated with CSS (cqw units).
+- Feed (`BookFeed.tsx`): all 15 books in one group, a 3-column grid, `orientation:
+  "vertical"`, `flyHome: "visible"`, `groupOpacity: 0.35`, landing `{1, 0.3}`, geometry 8 px all round on phones (no peek, like
+  TikTok) and a 460 px column with a peek on wider screens. Each card is a dark,
+  tinted "reel" (`.reel`, `position: absolute; inset: 0; container-type: size`, so
+  it fits the card instead of scrolling): cover sized by `cqw`/`cqh`, set a little
+  right of centre because the front cover swings open to the left; title, blurb
+  and a stats rail along the bottom. The layout choice persists in localStorage
+  (`bookzoom-layout`).
+- Portfolio (`Portfolio.tsx`, content in `portfolioContent.ts`, all invented sample
+  content): 4 projects (group "work", 4:3 tiles) and 5 pieces of writing (group
+  "writing", 68 px square thumbnails opening into 16:9 heroes: the flight crops).
+  `layout: "stream"` (no paging: every piece at its content's height, one column),
+  `flyHome: "visible"`, `groupOpacity: 0.35`, history `session`, cards in the page
+  theme, 680 px wide on desktop. Like the books, the image sits on the card, inset over
+  a band tinted with its ground (`.pf-stage`), and the card grows out from behind it:
+  landing `{0.86, 0.05}`. Each piece ends by naming the next (it follows directly),
+  or offers a way back on the last. Imagery is generated with CSS (`Art`, kinds like phones,
+  bars, tiles, shelf, spring). Fonts: Bricolage Grotesque (display), Newsreader
+  (reading).
+- The Feed tab has a "Moving between cards" panel (`PagingControls.tsx`) tuning
+  `timing.page` (duration, bounce), `paging.swipeDistance` and `paging.atEdge`,
+  persisted in `feed-paging-v1`. (It started on the portfolio, before that became a stream.)
 
 ## 6. Public API (summary)
 `ZoomProvider` props: `renderDestination`, `container`, `background`, `timing`,
-`timeScale`, `geometry`, `dim`, `scan`, `landing`, `dismiss`, `paging`,
-`hideGroupWhileOpen`, `closeButton`, `history`, `debug`, `getLabel`, `closeLabel`.
+`timeScale`, `geometry`, `dim`, `scan`, `landing`, `dismiss`, `paging`, `layout`, `orientation`,
+`hideGroupWhileOpen`, `groupOpacity`, `flyHome`, `closeButton`, `history`, `debug`, `getLabel`, `closeLabel`.
 Components: `ZoomSource`, `ZoomHero` (`live`), `TemplateDestination`.
 Types include `ZoomDismiss` and `ZoomEdges` (per-edge `drag` / `wheel` settings).
 Hooks: `useZoom`, `useZoomItem`, `useZoomProgress`, `useZoomEvent`, `useZoomValue`.
@@ -306,6 +398,16 @@ See README for details.
   closing by default, so a passing "stays open" means something), debug bands per
   edge, no blocking window wheel listener, paging/inert/focus, and on the fixed-overlay
   harness: scroll unlock, no sideways shift with scrollbars, cleanup on unmount.
+  `feed.spec.ts` covers the vertical pager: layout, arrows, wheel and touch paging,
+  content scrolling before paging, sideways touch/mouse/wheel close, Escape and X,
+  the dimmed group, and only the visible card flying home. `pager-paging.spec.ts`
+  (Feed tab, cards made long with injected content): scrolling over the card being
+  left mid page turn (both directions, wheel and touch, also where "instant" throws),
+  new swipes during momentum, quick flicks reading on, swipe distance, `atEdge` modes,
+  no bounce. `portfolio.spec.ts` (stream): content-height cards in one column, scrolling
+  straight through pieces with nothing cancelled, the sticky close button, only the
+  piece being read flying home, the card growing from behind the image, touch/wheel
+  close, writing as its own stream, Back.
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
   the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).

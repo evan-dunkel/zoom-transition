@@ -20,7 +20,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 430, height: 900 } } }],
   webServer: {
-    command: `npm run build:demo && npm run build:harness && python3 -m http.server ${PORT}`,
+    command: `npm run build:demo && npm run build:harness && npm run build:portfolio && python3 -m http.server ${PORT}`,
     port: PORT,
     reuseExistingServer: !process.env.CI,
   },
