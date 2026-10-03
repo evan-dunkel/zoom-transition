@@ -182,7 +182,7 @@ test("while open, the rest of the grid stays dimmed and the visible book's cover
   now = await looks();
   expect(now[4].hidden).toBe(false);
   expect(now[4].opacity).toBeCloseTo(0.35, 2);
-  expect(now[5].hidden).toBe(true);
+  expect(now[5].hidden || now[5].opacity === 0).toBe(true); // faded out (a page turn swaps softly)
 
   await page.keyboard.press("Escape");
   await expect.poll(() => phase(page)).toBe("idle");

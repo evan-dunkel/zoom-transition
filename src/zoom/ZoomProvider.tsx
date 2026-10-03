@@ -952,14 +952,36 @@ export function ZoomProvider(props: ZoomProviderProps) {
    * Everything that follows the visible card: the rest of the group on the page (with
    * groupOpacity) and, when only the visible card flies home, the other cards.
    */
+  /**
+   * groupOpacity: each source's share of the group's opacity. 1 for the rest of the
+   * group, 0 for the visible item's own source. When the visible item changes while
+   * open (a page turn, or scrolling a stream on to the next piece), the two swap
+   * softly instead of one snapping out and the other snapping in.
+   */
+  const presence = useRef(new Map<string, MotionValue<number>>());
+  const presenceOf = (id: string) => {
+    let mv = presence.current.get(id);
+    if (!mv) {
+      mv = motionValue(1);
+      presence.current.set(id, mv);
+      mv.on("change", () => writeGroupOpacity(id, groupBase()));
+    }
+    return mv;
+  };
+  /** The dimmed group's opacity: full on the page, groupOpacity once a card is open. */
+  const groupBase = () => (S.groupOpacity === null ? 1 : 1 - (1 - S.groupOpacity) * visibleProgress());
+  function writeGroupOpacity(id: string, base: number) {
+    if (S.groupOpacity === null || S.phase === "idle") return;
+    const el = sources.current.get(id)?.el;
+    if (!el || el.dataset.zoomDimmed === undefined) return;
+    el.style.setProperty("--zoom-group-opacity", String(base * (presence.current.get(id)?.get() ?? 1)));
+  }
   const followVisible = () => {
     if (S.groupOpacity === null && !S.flyVisible) return;
     const p = visibleProgress();
     if (S.groupOpacity !== null) {
-      const o = String(1 - (1 - S.groupOpacity) * p);
-      S.ids.forEach((id, j) => {
-        if (j !== S.index) sources.current.get(id)?.el.style.setProperty("--zoom-group-opacity", o);
-      });
+      const base = groupBase();
+      S.ids.forEach((id) => writeGroupOpacity(id, base));
     }
     if (S.flyVisible && !S.reduced) {
       // Squared, so they're mostly gone before the visible card has shrunk much.
@@ -1027,14 +1049,29 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.ids.forEach((id, j) => {
       const el = sources.current.get(id)?.el;
       if (!el) return;
+      el.dataset.zoomDimmed = "";
       if (j === S.index) {
-        delete el.dataset.zoomDimmed;
+        // Hidden outright while its card or flight covers it; its share stays 0 after.
         if (hideVisible) el.dataset.zoomHidden = "";
+        presenceOf(id).jump(0);
       } else {
         delete el.dataset.zoomHidden;
-        el.dataset.zoomDimmed = "";
+        presenceOf(id).jump(1);
       }
     });
+  };
+  /** The visible item changed while open: its source fades out as the last one's fades back in. */
+  const swapVisible = (previous: number, next: number) => {
+    const spec = timing().fade;
+    const prevEl = sources.current.get(S.ids[previous])?.el;
+    if (prevEl) {
+      delete prevEl.dataset.zoomHidden;
+      prevEl.dataset.zoomDimmed = "";
+    }
+    const nextEl = sources.current.get(S.ids[next])?.el;
+    if (nextEl) nextEl.dataset.zoomDimmed = "";
+    springTo(presenceOf(S.ids[previous]), 1, spec, { restDelta: REST.opacity, speed: speed() });
+    springTo(presenceOf(S.ids[next]), 0, spec, { restDelta: REST.opacity, speed: speed() });
   };
   const unmarkGroup = (el: HTMLElement) => {
     delete el.dataset.zoomDimmed;
@@ -1293,7 +1330,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
       emit(getItem(S.ids[i], i), "activated");
     }
     if (S.phase === "open" && latest.current.hideGroupWhileOpen === false && S.groupOpacity === null) hideForOpen();
-    if ((S.phase === "open" || S.phase === "opening") && S.groupOpacity !== null) hideForOpen();
+    if (S.groupOpacity !== null) {
+      if (S.phase === "open" && previous !== i) swapVisible(previous, i);
+      else if (S.phase === "opening") hideForOpen();
+    }
     if (S.flyVisible) followVisible();
     setIndexState(i);
     if (quiet) return;
@@ -1538,6 +1578,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         it.offOpacity = null;
         cv.o.set(0);
         delete src.el.dataset.zoomHidden;
+        if (S.groupOpacity !== null) presenceOf(id).jump(1); // the source is back, in full
         endFlight(it);
         it.landed = true;
         emit(it, "closed");
@@ -1619,6 +1660,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
     if (S.reduced) {
       setGroupHidden(false);
+      // The visible item's source fades back in with the rest of the page.
+      if (S.groupOpacity !== null) springTo(presenceOf(S.ids[S.index]), 1, timing().fadeOut, { restDelta: REST.opacity, speed: speed() });
       springTo(fade, 0, timing().fadeOut, { restDelta: REST.opacity, speed: speed() }).then(() => gen === S.gen && closeDone());
       return;
     }
@@ -1650,6 +1693,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   };
 
   const closeDone = () => {
+    presence.current.forEach((mv) => mv.jump(1)); // before the group is unmarked below
     S.ids.forEach((id, j) => {
       const it = getItem(id, j);
       if (!it.landed) emit(it, "closed");

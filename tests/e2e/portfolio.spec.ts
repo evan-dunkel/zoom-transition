@@ -13,8 +13,13 @@ const cards = (page: Page) =>
     }),
   );
 const streamTop = (page: Page) => page.locator(STREAM).evaluate((el) => el.scrollTop);
-/** The piece whose tile is hidden on the index: the one being read. */
-const reading = (page: Page) => page.locator(".pf-tile [data-zoom-hidden]").evaluateAll((els) => els.map((el) => el.closest("li")!.querySelector(".pf-tile-title")!.textContent));
+/** The piece whose tile is gone from the index (hidden, or faded right out): the one being read. */
+const reading = (page: Page) =>
+  page.locator(".pf-tile-art").evaluateAll((els) =>
+    els
+      .filter((el) => getComputedStyle(el).visibility === "hidden" || Number(getComputedStyle(el).opacity) < 0.01)
+      .map((el) => el.closest("li")!.querySelector(".pf-tile-title")!.textContent),
+  );
 
 async function openPortfolio(page: Page, slow = false) {
   await page.goto("/dist/");
@@ -166,4 +171,31 @@ test("Back closes", async ({ page }) => {
   await openProject(page, 2);
   await page.goBack();
   await expect.poll(() => phase(page)).toBe("idle");
+});
+
+test("moving on to the next piece fades its tile out softly, and the last one's back in", async ({ page }) => {
+  await openPortfolio(page);
+  await openProject(page, 1);
+  const look = (n: number) =>
+    page.locator(".pf-tile-art").nth(n).evaluate((el) => ({
+      opacity: Number(getComputedStyle(el).opacity),
+      hidden: getComputedStyle(el).visibility === "hidden",
+    }));
+  await page.locator(STREAM).evaluate((el) => {
+    const atlas = document.querySelector<HTMLElement>('[data-zoom-id="atlas-clinic"]')!;
+    el.scrollTop = atlas.offsetTop - 8;
+  });
+  // Part-way through the swap: neither tile has snapped.
+  await page.waitForTimeout(90);
+  const atlasMid = await look(2);
+  const fernMid = await look(1);
+  expect(atlasMid.hidden).toBe(false);
+  expect(atlasMid.opacity).toBeGreaterThan(0.02);
+  expect(fernMid.hidden).toBe(false);
+  expect(fernMid.opacity).toBeLessThan(0.33);
+  // Settled: the piece being read is gone from the index, the last one is dimmed with the rest.
+  await page.waitForTimeout(700);
+  expect(await reading(page)).toEqual(["Atlas Clinic"]);
+  expect((await look(2)).opacity).toBe(0);
+  expect((await look(1)).opacity).toBeCloseTo(0.35, 2);
 });

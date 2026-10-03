@@ -163,7 +163,13 @@ behind is live and a tap can reopen).
   (CSS in zoom.css). `followVisible()`, called from `updateDerived`, sets the variable
   to `1 − (1 − g) · p` where p is the visible card's progress (the fade with reduced
   motion), so the group dims as a card opens and returns as it lands. `markGroup` /
-  `unmarkGroup` apply and clean up; paging re-marks.
+  `unmarkGroup` apply and clean up. Each source also has a share (`presenceOf(id)`, a
+  motion value multiplied in): 0 for the visible item's, 1 for the rest. When the
+  visible item changes while open (a page turn, or scrolling a stream on), `swapVisible`
+  springs the two shares (timing.fade) so one tile fades out as the other fades back
+  in, instead of a hard hide snapping across. Opening still hides the visible source
+  outright (`data-zoom-hidden`), since its flight lifts off exactly over it; a landing
+  card's source gets its share back at once.
 - `flyHome: "visible"` (`S.flyVisible`): in `transitionCards`, cards other than the
   visible one don't fly. Closing leaves them where the bake put them; reopening
   springs them back to their slots. `followVisible()` sets their `cv.o` to p², so they

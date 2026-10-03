@@ -189,7 +189,8 @@ React island, or keep the markup in Astro and use one small island with `scan`
 - `hideGroupWhileOpen` — hide the whole group on the page while open (default true).
 - `groupOpacity` — instead of hiding the group, keep its other items on the page at this
   opacity (e.g. `0.35`); only the visible item's own source is hidden. They follow the
-  visible card, dimming as it opens and returning to full as it lands.
+  visible card, dimming as it opens and returning to full as it lands. When the visible
+  item changes while open, its source fades out and the last one's fades back in.
 - `flyHome` — `"group"` (default): closing sends every card back to its own source.
   `"visible"`: only the visible card flies home; the others stay where they are and fade
   with it (and fade in with it on open). Pair it with `groupOpacity` for a calm close:
