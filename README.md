@@ -239,6 +239,8 @@ npm test               # Playwright: builds the demo and harness, serves them, r
 
 - The hero flies as a copy with its computed styles frozen, so it looks the
   same outside the card. A playing video will show as its current frame.
+- A box-shadow on the hero element itself fades in as it opens and out as it closes,
+  since the source it flies from usually has none.
 - If source and hero have different aspect ratios, the copy is cropped to the
   source and opens out to the hero, so nothing stretches.
 - Every item in a group is rendered as a card while open. For very large

@@ -22,14 +22,22 @@ export type Flight = {
   destroy(): void;
 };
 
-export type HeroMetrics = { W0: number; H0: number; radius: number };
+export type HeroMetrics = {
+  W0: number;
+  H0: number;
+  radius: number;
+  /** The hero's own box-shadow ("none" if it has none) and corner radius, for the flight's shadow layer. */
+  shadow: string;
+  shadowRadius: string;
+};
 
 /** Far enough outside the copy's box that nothing a hero paints reaches it. */
 const OUTSIDE = 10000;
 
 /** Read everything a flight needs from the hero, in one go, before anything is written. */
 export function measureHero(hero: HTMLElement): HeroMetrics {
-  return { W0: hero.offsetWidth, H0: hero.offsetHeight, radius: readRadius(hero) };
+  const cs = getComputedStyle(hero);
+  return { W0: hero.offsetWidth, H0: hero.offsetHeight, radius: readRadius(hero), shadow: cs.boxShadow, shadowRadius: cs.borderRadius };
 }
 
 /**
@@ -75,9 +83,15 @@ export function createFlight(
     offset?: () => { x: number; y: number };
     /** A vertical band (in the layer's coordinates) to clip the copy to, or null for none. */
     clip?: () => { top: number; bottom: number } | null;
+    /**
+     * How much of the hero's own shadow to show (0 to 1), read every frame. The
+     * source it flies from usually has none, so a shadow carried at full strength
+     * pops on at take-off and off at landing; this fades it with the flight instead.
+     */
+    shadowOpacity?: () => number;
   } = {},
 ): Flight {
-  const { W0, H0, radius } = opts.metrics ?? measureHero(hero);
+  const { W0, H0, radius, shadow, shadowRadius } = opts.metrics ?? measureHero(hero);
   const fit = (r: Rect): Fit => {
     const s = Math.max(r.w / W0, r.h / H0);
     return {
@@ -103,6 +117,15 @@ export function createFlight(
   copy.style.margin = "0";
   copy.style.width = `${W0}px`;
   copy.style.height = `${H0}px`;
+  // The hero's own shadow is drawn on a layer of its own, behind the copy, so it can fade.
+  let shade: HTMLElement | null = null;
+  if (shadow && shadow !== "none") {
+    shade = document.createElement("div");
+    shade.className = "zoom-clone-shadow";
+    shade.style.cssText = `position:absolute;inset:0;border-radius:${shadowRadius};box-shadow:${shadow};pointer-events:none;`;
+    el.appendChild(shade);
+    copy.style.boxShadow = "none";
+  }
   el.appendChild(copy);
   // Live heroes get a host for their own React content. Until that content has
   // rendered (usually the same frame), the snapshot underneath stands in.
@@ -110,7 +133,7 @@ export function createFlight(
   if (opts.live) {
     liveHost = document.createElement("div");
     liveHost.className = ["zoom-live", opts.live.className].filter(Boolean).join(" ");
-    liveHost.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;margin:0;";
+    liveHost.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;margin:0;${shade ? "box-shadow:none;" : ""}`;
     el.appendChild(liveHost);
   }
   layer.appendChild(el);
@@ -131,6 +154,7 @@ export function createFlight(
     const left = cx.get() + o.x - (W0 * sv) / 2;
     const top = cy.get() + o.y - (H0 * sv) / 2;
     el.style.transform = `translate(${left}px, ${top}px) scale(${sv})`;
+    if (shade) shade.style.opacity = String(clamp(opts.shadowOpacity ? opts.shadowOpacity() : 1, 0, 1));
     // Clip only the sides that are meant to be clipped. A clip-path also cuts
     // anything the hero paints outside its own box (a shadow, a cover swung open
     // in 3D, a glow), so every side that isn't being cropped is pushed far out

@@ -899,6 +899,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
         const y = it.flightScroll0 === null ? 0 : -(it.flightScrollNow - it.flightScroll0) * zs.get() * it.cv.s.get();
         return { x: paged.x, y: paged.y + y };
       },
+      // The hero's shadow belongs to it in the card, not on the source: it fades in as
+      // the card opens and out as it closes, following the item's progress.
+      shadowOpacity: () => it.progress.get(),
       // Once it's following scrolled content, the copy is part of that content: hide
       // whatever has scrolled past the card's top or bottom edge, like the rest of it.
       clip: () => {

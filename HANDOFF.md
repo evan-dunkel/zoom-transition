@@ -112,6 +112,12 @@ behind is live and a tap can reopen).
   `cx, cy, s` (centre + uniform scale). `fit(rect)` = cover-fit scale + crop
   insets, so a square source can open into a wide hero without stretching.
 - `retarget(rect)` re-bases from the current state (springs keep velocity).
+- Shadow: the hero element's own `box-shadow` (read in `measureHero`) is moved off the
+  copy onto a `.zoom-clone-shadow` layer behind it, whose opacity follows the item's
+  `progress` (`shadowOpacity`). Sources rarely have the hero's shadow, so carried at
+  full strength it popped on at take-off and off at landing; now it fades in with the
+  open and out with the close, continuously through reversals. Only the hero's own
+  shadow; shadows on elements inside it fly as they are.
 - `offset()` (added every frame): follows **content scrolled mid-flight**
   (`y = -(scrollNow - scroll0) * zs * cv.s`) and **paging mid-flight**
   (`(track - track0) * zs` along the pager's axis), so the hand-over is pixel-exact.
