@@ -38,6 +38,8 @@ src/zoom/            the library (copy into a project)
 demo/                main.tsx (layout switch), BookStore.tsx (shelves), BookFeed.tsx (vertical
                      feed), BookParts.tsx (covers, 3D book), books.ts, Portfolio.tsx +
                      portfolioContent.ts (portfolio prototype), demo.css
+standalone/portfolio/ the portfolio at its simplest (plain HTML + templates + one island), built
+                     to dist/portfolio.html by its build.py; the reference for mapping onto a site
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
 tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)

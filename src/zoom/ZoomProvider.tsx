@@ -120,7 +120,8 @@ const defaultDismiss: ZoomDismiss = {
 };
 
 export type ZoomProviderProps = {
-  children: ReactNode;
+  /** Optional: with scan, the sources can be the page's own markup instead. */
+  children?: ReactNode;
   /** The destination for a source: any React content. Mark its shared element with <ZoomHero>. */
   renderDestination: (id: string) => ReactNode;
   /** Element the overlay is portalled into (must be positioned). Defaults to document.body, as a fixed overlay. */

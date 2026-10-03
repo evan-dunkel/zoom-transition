@@ -21,6 +21,8 @@ and closing sends every card back to its own source.
   (`BookStore.tsx`), the Book Store as a feed that pages up and down (`BookFeed.tsx`),
   and a design portfolio of long reads that opens into one continuous stream
   (`Portfolio.tsx`)
+- `standalone/portfolio/` — the portfolio at its simplest: plain markup, one island, one
+  stylesheet (`npm run build:portfolio` → `dist/portfolio.html`). Start here to map it onto a site.
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.

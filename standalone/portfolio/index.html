@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Portfolio Zoom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/zoom/zoom.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--
+  The whole pattern, in plain markup (what an Astro page renders):
+
+  1. Index: each image that opens is a source. data-zoom-source is the piece's id;
+     data-zoom-group makes the pieces of one section a single stream.
+  2. Pieces: one <template data-zoom-destination="id"> per piece. Inside it, the
+     element marked data-zoom-hero is the image that flies from the tile.
+  3. island.js mounts the zoom once and reads both from the page.
+
+  Without JavaScript the tiles are ordinary links to each piece's own page.
+-->
+<main>
+  <header class="intro">
+    <h1>Ines Calder</h1>
+    <p>Product designer. I work on interfaces that move well and read well: transit, reading, health, and the systems behind them.</p>
+    <p class="note">Sample portfolio. Open a project or a piece of writing and keep scrolling: the next one follows. Swipe sideways, press Esc or ✕ to close.</p>
+  </header>
+
+  <section aria-labelledby="work">
+    <h2 id="work" class="label">Selected work</h2>
+    <ul class="work">
+      <li><a class="tile" href="/work/tidewater">
+        <div class="tile-image" data-zoom-source="tidewater" data-zoom-group="work"><img src="images/tidewater.svg" alt=""></div>
+        <h3>Tidewater Transit</h3><p>Trip planning for a coastal city’s ferries and buses · 2025</p>
+      </a></li>
+      <li><a class="tile" href="/work/fernwood">
+        <div class="tile-image" data-zoom-source="fernwood" data-zoom-group="work"><img src="images/fernwood.svg" alt=""></div>
+        <h3>Fernwood Reader</h3><p>An e-reading app for an independent press · 2024</p>
+      </a></li>
+      <li><a class="tile" href="/work/atlas">
+        <div class="tile-image" data-zoom-source="atlas" data-zoom-group="work"><img src="images/atlas.svg" alt=""></div>
+        <h3>Atlas Clinic</h3><p>Scheduling for a network of community clinics · 2024</p>
+      </a></li>
+      <li><a class="tile" href="/work/kiln">
+        <div class="tile-image" data-zoom-source="kiln" data-zoom-group="work"><img src="images/kiln.svg" alt=""></div>
+        <h3>Kiln</h3><p>A design system for a handmade ceramics marketplace · 2023</p>
+      </a></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="writing">
+    <h2 id="writing" class="label">Writing and experiments</h2>
+    <ul class="notes">
+      <li><a class="row" href="/writing/interruptible">
+        <div class="row-image" data-zoom-source="interruptible" data-zoom-group="writing"><img src="images/interruptible.svg" alt=""></div>
+        <div><p class="meta">Essay · Sep 2026</p><h3>Interruptible by default</h3><p>Every transition should be able to change its mind halfway.</p></div>
+      </a></li>
+      <li><a class="row" href="/writing/springs">
+        <div class="row-image" data-zoom-source="springs" data-zoom-group="writing"><img src="images/springs.svg" alt=""></div>
+        <div><p class="meta">Experiment · Aug 2026</p><h3>Springs you can feel</h3><p>Matching SwiftUI’s duration-and-bounce springs on the web.</p></div>
+      </a></li>
+      <li><a class="row" href="/writing/shelf">
+        <div class="row-image" data-zoom-source="shelf" data-zoom-group="writing"><img src="images/shelf.svg" alt=""></div>
+        <div><p class="meta">Essay · Jun 2026</p><h3>The shelf is the interface</h3><p>Letting the page do the navigation.</p></div>
+      </a></li>
+      <li><a class="row" href="/writing/case-studies">
+        <div class="row-image" data-zoom-source="case-studies" data-zoom-group="writing"><img src="images/case-studies.svg" alt=""></div>
+        <div><p class="meta">Note · Feb 2026</p><h3>Case studies people finish</h3><p>A structure for readers with forty seconds.</p></div>
+      </a></li>
+    </ul>
+  </section>
+</main>
+
+<!-- Pieces. Each is a card as tall as its content; the image sits on it (data-zoom-hero). -->
+
+<template data-zoom-destination="tidewater">
+  <article class="piece">
+    <div class="piece-image" data-zoom-hero><img src="images/tidewater.svg" alt="Two phone screens of the Tidewater trip planner"></div>
+    <div class="piece-text">
+      <p class="meta">Project · 2025</p>
+      <h2>Tidewater Transit</h2>
+      <p class="lede">Riders were planning trips across three apps and a printed timetable. We folded ferries, buses and the tide-dependent water taxi into one planner that tells you when to leave, not just which way to go.</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Lead product designer</dd></div><div><dt>Team</dt><dd>2 designers, 5 engineers</dd></div><div><dt>Timeline</dt><dd>9 months</dd></div><div><dt>Platform</dt><dd>iOS, Android, web</dd></div></dl>
+      <h3>The problem with routes</h3>
+      <p>Most trip planners answer the question “which way?”. Our riders already knew which way. What they didn’t know was whether the 7:40 ferry would run with the tide that morning, or whether the bus would wait for it.</p>
+      <p>Interviews with forty commuters kept returning to the same moment: standing at the door, checking three apps, deciding whether to run.</p>
+      <h3>Leave by, not arrive by</h3>
+      <p>The planner leads with one instruction: leave in 6 minutes. The route, transfers and fare sit underneath and open on a tap. Live data from the ferry operator moves that number as conditions change, and a notification fires only if it moves by more than two minutes.</p>
+      <h3>What shipped</h3>
+      <p>The planner launched in spring 2025. The printed timetable is still on the pier, so the app’s schedule view matches it line for line: nobody has to relearn where the 7:40 is.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="fernwood">
+  <article class="piece">
+    <div class="piece-image" data-zoom-hero><img src="images/fernwood.svg" alt="The Fernwood house serif"></div>
+    <div class="piece-text">
+      <p class="meta">Project · 2024</p>
+      <h2>Fernwood Reader</h2>
+      <p class="lede">Fernwood publishes about twenty books a year and wanted readers to buy them direct. The app is a small shop and a careful reading room, with a store that feels like browsing the table at the front of a bookshop.</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Product designer</dd></div><div><dt>Team</dt><dd>1 designer, 3 engineers</dd></div><div><dt>Timeline</dt><dd>6 months</dd></div><div><dt>Platform</dt><dd>iOS, iPadOS</dd></div></dl>
+      <h3>Typesetting for screens</h3>
+      <p>Every Fernwood title is set by hand for print. We kept the press’s typefaces and margins and built the reading view around them: hanging punctuation, real small caps, and line lengths that adapt to the device but never pass seventy characters.</p>
+      <h3>A shelf that opens</h3>
+      <p>Covers face out on short shelves, and tapping one opens it in place: the cover flies from the shelf into the book’s page and opens as it arrives. Dragging down closes it back onto its shelf.</p>
+      <p>Each shelf holds five books, sized so the next cover always peeks in from the edge. That peek did more for browsing than any “see all” link we tried.</p>
+      <h3>Results</h3>
+      <p>Within a year, direct sales became a steady share of the press’s income. Most of the email we got from readers was about the typography.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="atlas">
+  <article class="piece">
+    <div class="piece-image" data-zoom-hero><img src="images/atlas.svg" alt="A bar chart of clinic arrivals"></div>
+    <div class="piece-text">
+      <p class="meta">Project · 2024</p>
+      <h2>Atlas Clinic</h2>
+      <p class="lede">Front-desk staff juggled walk-ins, appointments and interpreters across six clinics in a shared spreadsheet. Atlas gives each desk one view of the day and turns rescheduling into a drag instead of a phone tree.</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Senior product designer</dd></div><div><dt>Team</dt><dd>3 designers, 8 engineers</dd></div><div><dt>Timeline</dt><dd>14 months</dd></div><div><dt>Platform</dt><dd>Web</dd></div></dl>
+      <h3>Designing for the busiest hour</h3>
+      <p>We spent two weeks at front desks before drawing anything. Between 8 and 10 a.m. a desk checks in a patient every ninety seconds, often with a phone to one ear. That set the rule for every interaction: if it needs two hands or a second screen, it won’t get used.</p>
+      <h3>One timeline per room</h3>
+      <p>The day view is a stack of timelines, one per room and provider. Appointments are blocks you can drag between rooms. While you drag, Atlas checks interpreter and equipment availability and shades the slots that won’t work before you let go.</p>
+      <h3>Rollout</h3>
+      <p>Atlas replaced the spreadsheet one clinic at a time over five months. We kept a printed day sheet as an export, because some desks still like paper at the end of the day.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="kiln">
+  <article class="piece">
+    <div class="piece-image" data-zoom-hero><img src="images/kiln.svg" alt="Kiln's core shapes on a clay-coloured ground"></div>
+    <div class="piece-text">
+      <p class="meta">Project · 2023</p>
+      <h2>Kiln</h2>
+      <p class="lede">Kiln sells work from four hundred potters. The system had to make every product page consistent while letting glazes, textures and studio stories stay as varied as the pots.</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Design systems lead</dd></div><div><dt>Team</dt><dd>2 designers, 2 engineers</dd></div><div><dt>Timeline</dt><dd>8 months</dd></div><div><dt>Platform</dt><dd>Web, iOS</dd></div></dl>
+      <h3>Quiet components, loud photography</h3>
+      <p>Components carry almost no colour of their own. Each page takes a tint from its lead photo, sampled at build time, so a celadon bowl and a raku jar each sit on a ground that suits them.</p>
+      <h3>Tokens potters can read</h3>
+      <p>Sellers edit their own studio pages, so the tokens are named in their words: clay, slip, glaze, kiln. An engineer writes glaze-strong; a seller picks “Glaze” from a menu. Both get the same colour.</p>
+      <p>Within two quarters every product and studio page ran on the system, and new features shipped without one-off CSS.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="interruptible">
+  <article class="piece">
+    <div class="piece-image wide" data-zoom-hero><img src="images/interruptible.svg" alt=""></div>
+    <div class="piece-text">
+      <p class="meta">Essay · Sep 2026 · 6 min read</p>
+      <h2>Interruptible by default</h2>
+      <p>Watch someone use a phone for a minute and count how often they change their mind mid-gesture. They open something, see it isn’t what they wanted, and close it before it has finished opening.</p>
+      <blockquote>An animation that has to finish before you can act is a loading screen with better manners.</blockquote>
+      <h3>Carry the speed</h3>
+      <p>Making a transition interruptible is mostly bookkeeping. At the moment of interruption, take whatever is on screen, where it is and how fast it’s moving, and start the next spring from exactly there. A close that turns into an open keeps its momentum instead of stopping dead.</p>
+      <p>The hard part is everything you were tempted to fake: a shadow that only exists at the end, a crossfade timed to a duration. Each has to be expressed as a function of where things are, not of how long they’ve been going.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="springs">
+  <article class="piece">
+    <div class="piece-image wide" data-zoom-hero><img src="images/springs.svg" alt=""></div>
+    <div class="piece-text">
+      <p class="meta">Experiment · Aug 2026 · 4 min read</p>
+      <h2>Springs you can feel</h2>
+      <p>Stiffness and damping are honest numbers, but nobody can picture them. Duration and bounce are numbers you can feel: half a second, a little bounce.</p>
+      <p>SwiftUI’s springs are defined that way, and they convert exactly to physical ones: stiffness is (2π / duration)², damping is 4π(1 − bounce) / duration. Hand those to any spring solver and a value tuned on an iPhone feels the same in a browser.</p>
+      <h3>What changed</h3>
+      <p>Tuning sessions got shorter. A designer can say “a bit quicker, less bounce” and the numbers move the same way. Closing runs 1.75 times faster than opening, which reads as the interface getting out of your way.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="shelf">
+  <article class="piece">
+    <div class="piece-image wide" data-zoom-hero><img src="images/shelf.svg" alt=""></div>
+    <div class="piece-text">
+      <p class="meta">Essay · Jun 2026 · 7 min read</p>
+      <h2>The shelf is the interface</h2>
+      <p>In a good bookshop you never feel like you’re navigating. You pick something up, read the back, put it down where it was, and your eye is already on the next one. The shelf holds your place for you.</p>
+      <blockquote>The best back button is putting the thing back where you found it.</blockquote>
+      <h3>Putting it back</h3>
+      <p>A zoom that grows the book out of its spot, and shrinks it back into the same spot, keeps the shelf in your head the whole time. When only the book you were holding flies back, and the rest of the shelf waits behind, dimmed, the close feels like setting something down rather than tidying up a room.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="case-studies">
+  <article class="piece">
+    <div class="piece-image wide" data-zoom-hero><img src="images/case-studies.svg" alt=""></div>
+    <div class="piece-text">
+      <p class="meta">Note · Feb 2026 · 5 min read</p>
+      <h2>Case studies people finish</h2>
+      <p>The people reading your case study are hiring, and they have a stack of them. Give them the whole project in the first screen: what it was, what you did, and what changed.</p>
+      <blockquote>Lead with the outcome. The process is the reward for reading on.</blockquote>
+      <p>Everything after that is for the reader who decided to stay. Keep each section to one decision: what you knew, what you tried, what you chose and why.</p>
+    </div>
+  </article>
+</template>
+
+<div id="zoom"></div>
+<script src="island.js"></script>
+</body>
+</html>
