@@ -8,15 +8,16 @@ import { phase } from "./helpers";
 /** Records the flying image on every frame until the card is open. */
 async function recordOpen(page: Page, source = "a") {
   await page.evaluate(() => {
-    const frames: { w: number; h: number; radius: number; shadow: number }[] = [];
+    const frames: { t: number; w: number; h: number; radius: number; shadow: number }[] = [];
     (window as any).__frames = frames;
-    const tick = () => {
+    const tick = (t: number) => {
       const win = document.querySelector<HTMLElement>(".zoom-clone-window");
       const shade = document.querySelector<HTMLElement>(".zoom-clone-shadow");
       if (win) {
         const r = win.getBoundingClientRect();
         const scale = r.width / win.offsetWidth; // the window is drawn scaled
         frames.push({
+          t,
           w: r.width,
           h: r.height,
           // On screen. The window carries the corner while it crops; the copy inside it
@@ -36,15 +37,17 @@ async function recordOpen(page: Page, source = "a") {
       }
       requestAnimationFrame(tick);
     };
-    tick();
+    tick(performance.now());
   });
   await page.click(`[data-zoom-source="${source}"]`);
   await expect.poll(() => phase(page)).toBe("open");
-  const frames: { w: number; h: number; radius: number; shadow: number }[] = await page.evaluate(() => (window as any).__frames);
+  const frames: { t: number; w: number; h: number; radius: number; shadow: number }[] = await page.evaluate(() => (window as any).__frames);
   expect(frames.length).toBeGreaterThan(8);
   return frames;
 }
-const biggestStep = (xs: number[]) => Math.max(...xs.slice(1).map((x, i) => Math.abs(x - xs[i])));
+/** The biggest change in one 60 Hz frame's time (a dropped frame isn't a jump). */
+const biggestStep = (xs: number[], ts: number[]) =>
+  Math.max(...xs.slice(1).map((x, i) => Math.abs(x - xs[i]) / Math.max(1, (ts[i + 1] - ts[i]) / (1000 / 60))));
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/test/scan.html");
@@ -60,24 +63,27 @@ test("the crop eases from the tile's shape to the hero's evenly, not in a rush a
 });
 
 test("the corner tweens from the tile's radius to the hero's, without a jump at landing", async ({ page }) => {
-  const radii = (await recordOpen(page)).map((f) => f.radius);
+  const frames = await recordOpen(page);
+  const [radii, ts] = [frames.map((f) => f.radius), frames.map((f) => f.t)];
   expect(radii[0]).toBeCloseTo(12, 0);
   expect(radii[radii.length - 1]).toBeGreaterThan(30); // arrives at the hero's 32px…
-  expect(biggestStep(radii)).toBeLessThan(0.4 * 20); // …a little each frame
+  expect(biggestStep(radii, ts)).toBeLessThan(0.4 * 20); // …a little each frame
 });
 
 test("where the hero's image rounds itself (shadow left unclipped), its corner tweens too", async ({ page }) => {
-  const radii = (await recordOpen(page, "c")).map((f) => f.radius);
+  const frames = await recordOpen(page, "c");
+  const [radii, ts] = [frames.map((f) => f.radius), frames.map((f) => f.t)];
   expect(radii[0]).toBeCloseTo(40, 0); // takes off with the tile's 40px…
   expect(radii[radii.length - 1]).toBeCloseTo(32, 0); // …lands with the hero's 32px
-  expect(biggestStep(radii)).toBeLessThan(0.4 * 8);
+  expect(biggestStep(radii, ts)).toBeLessThan(0.4 * 8);
 });
 
 test("the shadow fades in with the flight instead of popping on at the end", async ({ page }) => {
-  const shadow = (await recordOpen(page)).map((f) => f.shadow);
+  const frames = await recordOpen(page);
+  const [shadow, ts] = [frames.map((f) => f.shadow), frames.map((f) => f.t)];
   expect(shadow[0]).toBeLessThan(0.2);
   expect(shadow[shadow.length - 1]).toBeGreaterThan(0.9);
-  expect(biggestStep(shadow)).toBeLessThan(0.4);
+  expect(biggestStep(shadow, ts)).toBeLessThan(0.4);
 });
 
 test("a tap or click leaves nothing focused; the keyboard keeps its place", async ({ page }) => {

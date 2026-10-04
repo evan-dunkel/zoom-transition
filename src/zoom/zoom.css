@@ -30,7 +30,18 @@
   -webkit-user-select: none;
   user-select: none;
 }
-.zoom-root.zoom-fixed { position: fixed; z-index: 1000; }
+/* Over the whole page (no container): part of the page, placed from script over the
+   viewport at the page's scroll position (which is locked while open), not position:
+   fixed. Phones draw the page on under the status bar and a floating toolbar, but iOS
+   Safari clips fixed content at the viewport's edge and paints a solid band under its
+   toolbar; page content shows through. The dim, the backdrop and a stream run on past the
+   viewport (--zoom-overscan) so the open cards show through the toolbar. Sideways it
+   clips, so a pager's off-screen cards don't widen the page; closed, it clips everything
+   so it never adds to the page's height. */
+.zoom-root.zoom-page { z-index: 1000; --zoom-overscan: 30vh; }
+.zoom-root.zoom-page[data-open] { overflow-x: clip; overflow-y: visible; }
+.zoom-page > :is(.zoom-dim, .zoom-backdrop) { top: calc(-1 * var(--zoom-overscan)); bottom: calc(-1 * var(--zoom-overscan)); }
+.zoom-page .zoom-stream { bottom: calc(-1 * var(--zoom-overscan)); }
 .zoom-root[data-open] { visibility: visible; pointer-events: auto; }
 /* While closing, the page behind is live again (tap a source to turn the close
    around); only the cards and covers on their way home catch taps. */
@@ -75,11 +86,10 @@
   min-height: 100%;
   overflow: clip; /* keep the content inside the card's corners when it bounces */
 }
-/* The close button sits on the hero's corner, under the hero's flying copy, so it can't
-   be seen fading during a flight: it's hidden while a card opens or closes and fades in
-   once the card has landed (the closing card's fades out above the flight, from script). */
+/* The close button sits on the hero's corner, under the hero's flying copy, so while a
+   card opens or closes it's hidden here and a copy above the flight stands in for it
+   (from script, fading with the flight). It shows again in the frame the card lands. */
 .zoom-root:is([data-phase="opening"], [data-phase="closing"]) .zoom-close-bar > * { opacity: 0; }
-.zoom-close-bar > * { transition: opacity var(--zoom-close-fade, 200ms) ease-out; }
 /* A zero-height sticky bar at the top of the content: the close button stays put
    while you scroll, and moves with the card when it bounces. In a stream it fades
    out as its card scrolls away (opacity set from script), rather than being cut off

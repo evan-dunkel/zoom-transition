@@ -231,6 +231,7 @@ test("after a tap or click nothing is left focused; keyboard users keep their pl
 });
 
 test("a sideways scroll neither scrolls the column nor pulls the card", async ({ page }) => {
+  test.skip(test.info().project.name === "iphone-webkit", "uses the mouse wheel, which a phone has none of");
   await page.goto("/dist/portfolio.html");
   await page.locator(".tile").nth(1).click();
   await expect.poll(() => phase(page)).toBe("open");

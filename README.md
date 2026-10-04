@@ -249,8 +249,12 @@ React island, or keep the markup in Astro and use one small island with `scan`
   steps back through them, then closes (for items that are places, like projects).
   `url: (id) => "/writing/" + id` gives each item a real address, so a reload or a
   shared link lands on that item's own static page. Defaults to `#id`.
-- `container` — portal target; defaults to `document.body` as a fixed overlay (scroll is locked
+- `container` — portal target; defaults to `document.body`, over the viewport (scroll is locked
   while open; where scrollbars take up space, their gutter is kept so the page doesn't shift).
+  That overlay is part of the page, placed over the viewport at the scroll position, rather
+  than `position: fixed`: iOS Safari clips fixed content at the viewport's edge and paints a
+  solid band under its floating toolbar, while page content shows through it. Its dim,
+  backdrop and stream run on past the viewport (`--zoom-overscan`) so open cards do too.
 - `background` — element made `inert` while open.
 - Reduced motion is automatic: open and close become fades.
 
@@ -307,9 +311,17 @@ What the page still decides, and how to keep it right:
 npm install
 npm run typecheck
 npm run build:demo     # dist/index.html, the Book Store as one self-contained page
-npx playwright install chromium   # once
+npx playwright install chromium webkit   # once
 npm test               # Playwright: builds the demo and harness, serves them, runs tests/e2e
 ```
+
+`npm test` runs Chromium and, for the specs that don't need a mouse wheel or DevTools touch,
+WebKit as an iPhone. Neither has iOS's compositing or Safari's toolbars. For those, the iOS
+Simulator (Xcode) runs real Mobile Safari, and `safaridriver` drives it: start
+`safaridriver -p 4444`, create a session with `{"platformName": "iOS", "safari:useSimulator": true}`,
+then navigate and run scripts over WebDriver, and take screenshots (toolbar included) with
+`xcrun simctl io booted screenshot`. Taps sent over WebDriver can miss in the Simulator; a
+scripted `element.click()` is reliable.
 
 ## Notes
 

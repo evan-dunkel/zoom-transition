@@ -133,7 +133,7 @@ export type ZoomProviderProps = {
   children?: ReactNode;
   /** The destination for a source: any React content. Mark its shared element with <ZoomHero>. */
   renderDestination: (id: string) => ReactNode;
-  /** Element the overlay is portalled into (must be positioned). Defaults to document.body, as a fixed overlay. */
+  /** Element the overlay is portalled into (must be positioned). Defaults to document.body, over the viewport. */
   container?: () => HTMLElement | null;
   /** Element made inert while a destination is open (the page behind). */
   background?: () => HTMLElement | null;
@@ -630,7 +630,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     /** While closing: a source on the page, and where it was last seen (viewport px). */
     pageRef: null as { el: HTMLElement; left: number; top: number; vw: number; vh: number } | null,
     sessionKey: 0,
-    /** Portalled into document.body as a fixed overlay (no container given). */
+    /** Portalled into document.body, over the viewport (no container given). */
     fixed: false,
     /** groupOpacity for this session (null: the group is hidden or shown as hideGroupWhileOpen says). */
     groupOpacity: null as number | null,
@@ -1199,7 +1199,22 @@ export function ZoomProvider(props: ZoomProviderProps) {
     });
   };
 
-  // As a fixed overlay, the page behind stops scrolling while open. Where scrollbars
+  /**
+   * Over the whole page, the overlay is part of the page (zoom.css, .zoom-page): placed
+   * over the viewport at the page's scroll position. Its containing block may be offset
+   * (a positioned body), so it's measured at the origin first.
+   */
+  const placeOnPage = () => {
+    const root = rootRef.current;
+    if (!S.fixed || !root) return;
+    const html = document.documentElement;
+    Object.assign(root.style, { right: "auto", bottom: "auto", left: "0px", top: "0px", width: `${html.clientWidth}px`, height: `${html.clientHeight}px` });
+    const r = root.getBoundingClientRect();
+    root.style.left = `${-r.left}px`;
+    root.style.top = `${-r.top}px`;
+  };
+
+  // Over the whole page, the page behind stops scrolling while open. Where scrollbars
   // take up space (Windows, Linux, some macOS settings), their gutter is kept so the
   // page doesn't reflow sideways, which would also move the sources cards land on.
   const lockScroll = () => {
@@ -1223,9 +1238,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
   /** Closing: start watching a source, to tell the page moving under the overlay. */
   const watchPage = (el: HTMLElement | null) => {
     if (!el) return (S.pageRef = null);
+    // Relative to the overlay: over the whole page it's part of the page, and moves with it.
     const r = el.getBoundingClientRect();
+    const o = rootRef.current!.getBoundingClientRect();
     const vv = window.visualViewport;
-    S.pageRef = { el, left: r.left, top: r.top, vw: vv?.width ?? innerWidth, vh: vv?.height ?? innerHeight };
+    S.pageRef = { el, left: r.left - o.left, top: r.top - o.top, vw: vv?.width ?? innerWidth, vh: vv?.height ?? innerHeight };
   };
   const applyShift = () => {
     const t = S.shift.x || S.shift.y ? `${S.shift.x}px ${S.shift.y}px` : "";
@@ -1267,6 +1284,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const ids = latest.current.paging === false ? [id] : orderedIds(entry.group);
     S.ids = ids;
     S.index = ids.indexOf(id);
+    placeOnPage(); // before measuring: the overlay is over the viewport where the page is now
     S.L = computeLayout();
     S.reduced = !!reduceRef.current;
     const d = latest.current.dim;
@@ -1278,6 +1296,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.mode = "zoom";
     extrasOpacity.jump(1);
     setPhase("opening");
+    startFlightButton();
     ids.forEach((i, j) => resetItem(getItem(i, j)));
     track.jump(trackAt(S.index)); // so the freshly mounted track renders in place
     updateAllFocus();
@@ -1460,6 +1479,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const active = items.current.get(S.ids[S.index]);
     if (active && Number.isFinite(active.sLand)) S.s0 = active.sLand;
     setPhase("open");
+    endFlightButton(); // the real button shows from this frame
     updateAllProgress();
     emitAll("opened");
     gesturesRef.current?.refresh();
@@ -1828,39 +1848,54 @@ export function ZoomProvider(props: ZoomProviderProps) {
   };
 
   /**
-   * The closing card's button sits on its hero's corner, and the hero's flying copy is
-   * drawn above the cards, so the button would vanish under it at once. A copy of it
-   * fades out above the flight instead.
+   * The visible card's close button during a flight. The button sits on its hero's corner,
+   * and the hero's flying copy is drawn above the cards, so the real button (hidden by
+   * zoom.css while a card opens or closes) can't be seen there. A copy rides above the
+   * flight instead: on the real button's spot every frame (read after Motion has written
+   * the frame's card positions, so it doesn't trail), with the flight's progress squared,
+   * so it arrives late in an open and leaves early in a close, and follows a close that
+   * turns around. At landing the real button takes over in the same frame.
    */
-  const fadeOutCloseButton = (id: string) => {
+  // One copy and one follower for the provider's life (not per render), so whichever
+  // render ends a flight removes the copy the starting render made.
+  const flightButton = useRef({ el: null as HTMLElement | null, id: "", follow: null as (() => void) | null }).current;
+  function followFlightButton() {
+    if (S.phase !== "opening" && S.phase !== "closing") return endFlightButton();
+    const id = S.ids[S.index];
     const button = cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-close-bar > *");
     const layer = flightRef.current;
-    if (!button || !layer || S.phase !== "open") return;
-    const r = button.getBoundingClientRect();
-    const o = Number(getComputedStyle(button.parentElement!).opacity) * Number(getComputedStyle(button).opacity);
-    if (o < 0.05 || r.bottom < 0 || r.width === 0) return;
-    const at = rel(r);
-    const ghost = button.cloneNode(true) as HTMLElement;
-    ghost.removeAttribute("data-zoom-close");
-    ghost.setAttribute("aria-hidden", "true");
-    ghost.tabIndex = -1;
-    Object.assign(ghost.style, { position: "absolute", left: `${at.x}px`, top: `${at.y}px`, right: "auto", bottom: "auto", margin: "0", pointerEvents: "none" });
-    layer.appendChild(ghost);
-    // It rides on the card's corner as the card heads home: the real, hidden button marks
-    // it, read once Motion has written the frame's card positions (else it trails a frame).
-    ghost.style.transformOrigin = "0 0";
-    const follow = () => {
-      if (!ghost.isConnected) return cancelFrame(follow);
-      const b = rel(button.getBoundingClientRect());
-      ghost.style.transform = `translate(${b.x - at.x}px, ${b.y - at.y}px) scale(${at.w ? b.w / at.w : 1})`;
-    };
-    frame.postRender(follow, true);
-    const ms = parseFloat(getComputedStyle(rootRef.current!).getPropertyValue("--zoom-close-fade")) || 200;
-    ghost.animate([{ opacity: o }, { opacity: 0 }], { duration: ms / speed(), easing: "ease-out", fill: "forwards" }).finished.then(
-      () => ghost.remove(),
-      () => ghost.remove(),
-    );
-  };
+    if (!button || !layer) return;
+    if (flightButton.id !== id || !flightButton.el) {
+      flightButton.el?.remove();
+      const ghost = button.cloneNode(true) as HTMLElement;
+      ghost.removeAttribute("data-zoom-close");
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.tabIndex = -1;
+      ghost.classList.add("zoom-flight-close");
+      // zIndex: above the flying copies, whichever was added to the layer first.
+      Object.assign(ghost.style, { position: "absolute", zIndex: "1", left: "0", top: "0", right: "auto", bottom: "auto", margin: "0", transformOrigin: "0 0", pointerEvents: "none" });
+      layer.appendChild(ghost);
+      flightButton.el = ghost;
+      flightButton.id = id;
+    }
+    const b = rel(button.getBoundingClientRect());
+    const w = button.offsetWidth || 1;
+    const p = clamp(visibleProgress(), 0, 1);
+    const bar = parseFloat(button.parentElement!.style.opacity || "1"); // a stream's scroll fade
+    flightButton.el.style.transform = `translate(${b.x}px, ${b.y}px) scale(${b.w / w})`;
+    flightButton.el.style.opacity = String(p * p * bar);
+  }
+  function startFlightButton() {
+    if (latest.current.closeButton === false) return;
+    flightButton.follow ??= followFlightButton;
+    frame.postRender(flightButton.follow, true);
+  }
+  function endFlightButton() {
+    if (flightButton.follow) cancelFrame(flightButton.follow);
+    flightButton.el?.remove();
+    flightButton.el = null;
+    flightButton.id = "";
+  }
 
   /** Close from open, or turn an opening around. */
   const close = useCallback((v?: ZoomVelocity, closeOpts: { towardTargetOnly?: boolean; id?: string } = {}) => {
@@ -1879,8 +1914,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const active = sources.current.get(S.ids[S.index]);
     const scrolled = !S.reduced && active ? revealSource(active.el) : false;
     showHiddenSourceFor(S.index); // the visible item's place on the page, ready for it
-    if (!S.reduced) fadeOutCloseButton(S.ids[S.index]);
     setPhase("closing");
+    startFlightButton();
     emitAll("closing", interrupted);
     setBackgroundInert(false); // so tapping a source can turn the close around
     releaseScroll();
@@ -1933,6 +1968,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const j = S.ids.indexOf(id);
     if (j < 0) return;
     setPhase("opening");
+    startFlightButton();
     setBackgroundInert(true);
     relockScroll();
     if (j !== S.index) setIndex(j);
@@ -1951,6 +1987,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   };
 
   const closeDone = () => {
+    endFlightButton();
     presence.current.forEach((mv) => mv.jump(1)); // before the group is unmarked below
     S.ids.forEach((id, j) => {
       const it = getItem(id, j);
@@ -2079,13 +2116,15 @@ export function ZoomProvider(props: ZoomProviderProps) {
       const ref = S.pageRef;
       if (!ref) return reaimSoon();
       const r = ref.el.getBoundingClientRect();
+      const o = root.getBoundingClientRect();
       const vv = window.visualViewport;
       const vw = vv?.width ?? innerWidth;
       const vh = vv?.height ?? innerHeight;
-      const dx = r.left - ref.left;
-      const dy = r.top - ref.top;
+      const [left, top] = [r.left - o.left, r.top - o.top];
+      const dx = left - ref.left;
+      const dy = top - ref.top;
       const resized = Math.abs(vw - ref.vw) > 0.5 || Math.abs(vh - ref.vh) > 0.5;
-      Object.assign(ref, { left: r.left, top: r.top, vw, vh });
+      Object.assign(ref, { left, top, vw, vh });
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
       if (!resized) return reaimSoon();
       S.shift = { x: S.shift.x + dx, y: S.shift.y + dy };
@@ -2100,6 +2139,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
     // The viewport changing size mid-close (a host re-laying out the page, toolbars
     // showing) moves the sources too.
+    // Over the whole page, the overlay follows the viewport's size (first, so the page's
+    // movement is then measured against where it now is).
+    const replace = () => S.phase !== "idle" && placeOnPage();
+    window.addEventListener("resize", replace);
+    window.visualViewport?.addEventListener("resize", replace);
     window.addEventListener("resize", followPage);
     window.visualViewport?.addEventListener("resize", followPage);
     document.addEventListener("scroll", onAnyScroll, { capture: true, passive: true });
@@ -2148,6 +2192,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
       window.removeEventListener("keydown", onKeyInput, true);
       window.removeEventListener("pointerdown", onPointerInput, true);
       window.removeEventListener("popstate", onPop);
+      window.removeEventListener("resize", replace);
+      window.visualViewport?.removeEventListener("resize", replace);
       window.removeEventListener("resize", followPage);
       window.visualViewport?.removeEventListener("resize", followPage);
       document.removeEventListener("scroll", onAnyScroll, { capture: true });
@@ -2239,7 +2285,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     createPortal(
       <div
         ref={rootRef}
-        className={["zoom-root", fixed && "zoom-fixed", layout?.vertical && "zoom-vertical", layout?.stream && "zoom-streaming"]
+        className={["zoom-root", fixed && "zoom-page", layout?.vertical && "zoom-vertical", layout?.stream && "zoom-streaming"]
           .filter(Boolean)
           .join(" ")}
         role="dialog"
@@ -2255,7 +2301,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
               className={layout.stream ? "zoom-stream" : "zoom-track"}
               style={
                 layout.stream
-                  ? { paddingTop: layout.top, paddingBottom: layout.top, rowGap: layout.gap, ["--zoom-gap" as string]: `${layout.gap}px` }
+                  ? { paddingTop: layout.top, paddingBottom: `calc(${layout.top}px + var(--zoom-overscan, 0px))`, rowGap: layout.gap, ["--zoom-gap" as string]: `${layout.gap}px` }
                   : layout.vertical
                     ? { y: track }
                     : { x: track }

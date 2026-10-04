@@ -211,7 +211,21 @@ behind is live and a tap can reopen).
   scroll-snap** (re-enabling snap caused a ~10 px jump after landing in Safari).
 - Sources ordered by DOM position (`compareDocumentPosition`).
 
-### Page state while open (fixed overlay)
+### Page state while open (overlay over the page)
+- Over the whole page (no container) the root is `.zoom-page`: `position: absolute` in the
+  page, placed by `placeOnPage()` over the viewport at the scroll position (measured at the
+  origin first, in case the containing block is offset), at open and on resize. Not fixed:
+  in iOS Safari (checked in the iOS 27 Simulator) fixed content is clipped at the viewport's
+  edge and a solid band, coloured from the fixed content at the edge, is painted under the
+  floating toolbar and the status bar; page content shows through both. Open, it clips
+  sideways (`overflow-x: clip`, so a pager's off-screen cards don't widen the page) and
+  overhangs vertically: dim, backdrop and a stream extend `--zoom-overscan` (30vh) past the
+  viewport, the stream with the same extra bottom padding so its last card rests above the
+  toolbar. Closed, the root clips everything, adding nothing to the page's size. During a
+  close the page can scroll again (see releaseScroll); the overlay then moves with it, so
+  `watchPage`/`followPage` measure the source relative to the overlay, not the screen.
+  At scroll 0 nothing of the page is above it, so the strip under the status bar shows the
+  page's background rather than the dim.
 - `lockScroll`/`unlockScroll`: `overflow: hidden` on `<html>`, plus
   `scrollbar-gutter: stable` when scrollbars take up space, so the page (and the
   sources cards land on) don't shift sideways. Previous inline styles are restored.
@@ -497,13 +511,16 @@ See README for details.
   measurement stays in the shifted frame and springs are untouched); a move without a
   resize is a scroll and re-aims. Cleared at closeDone and openDone. Guarded by "if a host
   re-lays out the page mid-close ... without a jump" (68px jump without the shift).
-- Close buttons: the button sits on the hero's corner, under the hero's flying copy, so
-  any fade during a flight is hidden and it popped in at landing. zoom.css hides it while
-  `data-phase` is opening/closing and fades it in once landed (`--zoom-close-fade`, 200ms);
-  on close, `fadeOutCloseButton` puts a copy of the visible card's button above the
-  flight and fades it out, following the real (hidden) button in Motion's postRender step
-  so it doesn't trail a frame. `writeBar` keeps the bar's own opacity = scroll fade × card
-  opacity (sticky layers can miss their ancestors' opacity in Safari).
+- Close buttons: the button sits on the hero's corner, under the hero's flying copy. While
+  a card opens or closes, zoom.css hides the real button and `followFlightButton` (Motion
+  postRender, so it doesn't trail the cards) draws a copy of the visible card's button in
+  the flight layer (`zIndex` 1, above the flying copies whichever was added first), on the
+  real button's spot each frame, at visible progress² × the bar's scroll fade. It follows
+  a close that turns around, and `openDone`/`closeDone` remove it in the frame the real
+  button shows, so there's no fade gap. Its state (`flightButton`) is a ref: when it was
+  per render, the render ending a flight couldn't see the copy the starting render made,
+  and both buttons showed for a frame. `writeBar` keeps the bar's own opacity = scroll fade
+  × card opacity (sticky layers can miss their ancestors' opacity in Safari).
 - `flight-invariants.spec.ts` guards what every layout inherits, on the plain harness
   (`test/scan.html`: a square 12px tile opening into a 16:9, 32px hero with a shadow): even
   crop, corner tween without a landing jump, shadow fading with the flight, focus by input

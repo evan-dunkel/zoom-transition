@@ -70,6 +70,7 @@ test("Air Apps cards lead with the image; the rest with an icon at the corner, t
 });
 
 test("About ends the stream with a way to get in touch", async ({ page }) => {
+  test.skip(test.info().project.name === "iphone-webkit", "reads the clipboard, which needs a permission only Chromium grants here");
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await open(page, ".tile", 0);
   await page.locator(".zoom-stream").evaluate((el) => (el.scrollTop = el.scrollHeight));
@@ -119,41 +120,54 @@ test("a card's own close button sends that card home", async ({ page }) => {
   await expect.poll(() => phase(page)).toBe("idle");
 });
 
-test("the close button stays hidden under the flight, fades in once landed, and fades out above the close", async ({ page }) => {
+test("the close button rides above the flight, fading with it, and the real one takes over at landing", async ({ page }) => {
   await page.goto("/dist/portfolio-icons.html?slow=4");
-  // Every frame: the button's drawn opacity (bar × button), and any copy of it above the flight.
+  // Every frame: the real button's drawn opacity (bar × button), and its copy above the flight.
   await page.evaluate(() => {
-    const seen: { phase: string; o: number; ghost: number | null }[] = [];
+    const seen: { phase: string; o: number; ghost: number | null; onTop: boolean }[] = [];
     (window as any).__x = seen;
     const tick = () => {
       const root = document.querySelector<HTMLElement>(".zoom-root")!;
       const button = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="air-one"] .zoom-close');
       const ghost = document.querySelector<HTMLElement>(".zoom-flight .zoom-close");
-      if (button && root.hasAttribute("data-open"))
+      if (button && root.hasAttribute("data-open")) {
+        // On top: in the flight layer with the flying image, stacked above it.
+        const clone = document.querySelector<HTMLElement>(".zoom-flight .zoom-clone");
+        const onTop =
+          !!ghost && (!clone || ghost.parentElement === clone.parentElement) &&
+          (!clone || Number(getComputedStyle(ghost).zIndex) > (Number(getComputedStyle(clone).zIndex) || 0));
         seen.push({
           phase: root.dataset.phase!,
           o: Number(getComputedStyle(button.parentElement!).opacity) * Number(getComputedStyle(button).opacity),
           ghost: ghost ? Number(getComputedStyle(ghost).opacity) : null,
+          onTop,
         });
+      }
       requestAnimationFrame(tick);
     };
     tick();
   });
-  const seen = () => page.evaluate(() => (window as any).__x as { phase: string; o: number; ghost: number | null }[]);
+  const seen = () => page.evaluate(() => (window as any).__x as { phase: string; o: number; ghost: number | null; onTop: boolean }[]);
   await page.locator(".tile").nth(0).click();
   await expect.poll(() => phase(page), { timeout: 8000 }).toBe("open");
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(200);
   const opening = await seen();
-  expect(opening.filter((f) => f.phase === "opening").every((f) => f.o < 0.05)).toBe(true); // hidden in flight
-  const landed = opening.filter((f) => f.phase === "open").map((f) => f.o);
-  expect(landed[0]).toBeLessThan(0.5); // fades in after landing…
-  expect(landed[landed.length - 1]).toBe(1); // …to full
+  const inFlight = opening.filter((f) => f.phase === "opening");
+  expect(inFlight.every((f) => f.o < 0.05)).toBe(true); // the real one is hidden under the flight…
+  const ghosts = inFlight.map((f) => f.ghost).filter((g): g is number => g !== null);
+  expect(ghosts.length).toBeGreaterThan(5); // …and its copy is drawn above it,
+  expect(inFlight.filter((f) => f.ghost !== null && f.ghost > 0.05).every((f) => f.onTop)).toBe(true);
+  expect(ghosts[0]).toBeLessThan(0.2); // fading in with the flight…
+  expect(ghosts[ghosts.length - 1]).toBeGreaterThan(0.8);
+  const landed = opening.filter((f) => f.phase === "open");
+  expect(landed[0].o).toBe(1); // …and the real one is at full in the frame it lands: no dip
+  expect(landed.every((f) => f.ghost === null)).toBe(true);
   await page.evaluate(() => ((window as any).__x.length = 0));
   await page.keyboard.press("Escape");
   await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
-  const ghosts = (await seen()).map((f) => f.ghost).filter((g): g is number => g !== null);
-  expect(ghosts.length).toBeGreaterThan(2); // a copy above the flying image…
-  expect(ghosts[0]).toBeGreaterThan(0.6);
-  expect(Math.min(...ghosts)).toBeLessThan(0.3); // …fading out
-  expect(await page.locator(".zoom-flight .zoom-close").count()).toBe(0); // and gone
+  const closing = (await seen()).map((f) => f.ghost).filter((g): g is number => g !== null);
+  expect(closing.length).toBeGreaterThan(2); // on close, the copy above the flying image…
+  expect(closing[0]).toBeGreaterThan(0.6);
+  expect(Math.min(...closing)).toBeLessThan(0.3); // …fades out with it
+  expect(await page.locator(".zoom-flight .zoom-close").count()).toBe(0); // and is gone
 });
