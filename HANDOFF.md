@@ -473,8 +473,13 @@ See README for details.
   or with long tasks injected into the first frames. The first-open screenshot showed the
   flying copy still up, so that open hadn't finished. `standalone/diagnostics` logs the
   zoom's state after each tap for reading on the device. Open.
-- Close buttons fade with the flight (`writeBar`: scroll fade × progress² × card opacity,
-  on the bar itself; sticky layers can miss their ancestors' opacity in Safari).
+- Close buttons: the button sits on the hero's corner, under the hero's flying copy, so
+  any fade during a flight is hidden and it popped in at landing. zoom.css hides it while
+  `data-phase` is opening/closing and fades it in once landed (`--zoom-close-fade`, 200ms);
+  on close, `fadeOutCloseButton` puts a copy of the visible card's button above the
+  flight and fades it out, following the real (hidden) button in Motion's postRender step
+  so it doesn't trail a frame. `writeBar` keeps the bar's own opacity = scroll fade × card
+  opacity (sticky layers can miss their ancestors' opacity in Safari).
 - `flight-invariants.spec.ts` guards what every layout inherits, on the plain harness
   (`test/scan.html`: a square 12px tile opening into a 16:9, 32px hero with a shadow): even
   crop, corner tween without a landing jump, shadow fading with the flight, focus by input

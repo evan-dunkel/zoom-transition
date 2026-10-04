@@ -1,6 +1,5 @@
 // Diagnostics: the icon prototype, plus a log of the zoom's state after each tap, for
-// reading on a device (first open vs reopen). Each open logs at fixed times after the
-// tap; the panel keeps the last two opens.
+// reading on a device (first open vs reopen). Newest first; the panel scrolls.
 import { mountPortfolio } from "../portfolio-icons/mount";
 
 const panel = document.querySelector<HTMLElement>(".diag")!;
@@ -11,6 +10,7 @@ addEventListener("unhandledrejection", (e) => errors.push("promise: " + String(e
 mountPortfolio();
 
 const r = (n: number) => Math.round(n);
+/** One dense line of state. */
 const state = () => {
   const root = document.querySelector<HTMLElement>(".zoom-root");
   const z = document.querySelector<HTMLElement>(".zoom-zoomer");
@@ -18,32 +18,57 @@ const state = () => {
   const title = document.querySelector<HTMLElement>("[data-zoom-section-title]");
   const rr = root?.getBoundingClientRect();
   const vv = window.visualViewport;
+  const zt = (z?.style.transform || "none").match(/translateY\(([-\d.]+)px\)/);
   return [
-    `phase=${root?.dataset.phase ?? "-"} clones=${document.querySelectorAll(".zoom-clone").length}`,
-    `zoomer=${(z?.style.transform || "none").replace(/px/g, "").replace(/translate/g, "t").slice(0, 46)}`,
-    `root top=${rr ? r(rr.top) : "-"} h=${rr ? r(rr.height) : "-"} | inner=${innerWidth}x${innerHeight} vv=${vv ? `${r(vv.width)}x${r(vv.height)}@${r(vv.offsetTop)}` : "-"}`,
-    `title=${title ? r(title.getBoundingClientRect().top) : "-"} streamTop=${sc ? r(sc.scrollTop) : "-"} pageY=${r(scrollY)} htmlOverflow=${document.documentElement.style.overflow || "-"}`,
-  ].join("\n  ");
+    `${root?.dataset.phase ?? "-"}`,
+    `clones=${document.querySelectorAll(".zoom-clone").length}`,
+    `zY=${zt ? r(Number(zt[1])) : 0}`,
+    `title=${title ? r(title.getBoundingClientRect().top) : "-"}`,
+    `col=${sc ? r(sc.scrollTop) : "-"}`,
+    `root=${rr ? `${r(rr.top)}/${r(rr.height)}` : "-"}`,
+    `win=${innerHeight}`,
+    `doc=${document.documentElement.clientHeight}`,
+    `vv=${vv ? `${r(vv.height)}@${r(vv.offsetTop)}/${r(vv.pageTop)}` : "-"}`,
+    `scr=${screen.height}`,
+    `pageY=${r(scrollY)}`,
+  ].join(" ");
 };
 
+const events: string[][] = []; // newest first; each: a heading, then timed lines
 let opens = 0;
-let log: string[] = [];
-const render = () => (panel.textContent = [...log, errors.length ? "errors: " + errors.join(" | ") : ""].join("\n"));
+const render = () => {
+  panel.textContent = [
+    `now ${state()}`,
+    errors.length ? `errors: ${errors.join(" | ")}` : "",
+    ...events.flatMap((e) => e),
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+const record = (heading: string, at: number[]) => {
+  const lines = [heading];
+  events.unshift(lines);
+  events.length = Math.min(events.length, 6);
+  const t0 = performance.now();
+  for (const ms of at)
+    setTimeout(() => {
+      lines.push(` +${r(performance.now() - t0)} ${state()}`);
+      render();
+    }, ms);
+};
 document.addEventListener(
   "click",
   (e) => {
-    if (!(e.target as Element).closest("[data-zoom-source], .tile, .item")) return;
-    opens += 1;
-    const t0 = performance.now();
-    if (log.length > 14) log = log.slice(-7);
-    log.push(`— open ${opens} (${opens === 1 ? "first after load" : "again"})`);
-    for (const at of [0, 150, 400, 800, 1500, 3000]) {
-      setTimeout(() => {
-        log.push(`+${r(performance.now() - t0)}ms ${state()}`);
-        render();
-      }, at);
+    const t = e.target as Element;
+    const root = document.querySelector<HTMLElement>(".zoom-root");
+    if (t.closest("[data-zoom-close]")) record("— close (✕)", [0, 600]);
+    else if (t.closest(".tile, .item") && root?.dataset.phase !== "open") {
+      opens += 1;
+      record(`— open ${opens}${opens === 1 ? " (first after load)" : ""}`, [0, 150, 400, 1500, 3000]);
     }
   },
   true,
 );
-panel.textContent = `ready: ${navigator.userAgent.replace(/^Mozilla\/5.0 /, "").slice(0, 90)}`;
+addEventListener("keydown", (e) => e.key === "Escape" && record("— close (Esc)", [0, 600]), true);
+setInterval(render, 500);
+render();

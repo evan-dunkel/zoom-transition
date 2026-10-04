@@ -75,6 +75,11 @@
   min-height: 100%;
   overflow: clip; /* keep the content inside the card's corners when it bounces */
 }
+/* The close button sits on the hero's corner, under the hero's flying copy, so it can't
+   be seen fading during a flight: it's hidden while a card opens or closes and fades in
+   once the card has landed (the closing card's fades out above the flight, from script). */
+.zoom-root:is([data-phase="opening"], [data-phase="closing"]) .zoom-close-bar > * { opacity: 0; }
+.zoom-close-bar > * { transition: opacity var(--zoom-close-fade, 200ms) ease-out; }
 /* A zero-height sticky bar at the top of the content: the close button stays put
    while you scroll, and moves with the card when it bounces. In a stream it fades
    out as its card scrolls away (opacity set from script), rather than being cut off

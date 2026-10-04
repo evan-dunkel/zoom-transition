@@ -119,29 +119,41 @@ test("a card's own close button sends that card home", async ({ page }) => {
   await expect.poll(() => phase(page)).toBe("idle");
 });
 
-test("the close button fades in with the open and out with the close, instead of riding the flight", async ({ page }) => {
+test("the close button stays hidden under the flight, fades in once landed, and fades out above the close", async ({ page }) => {
   await page.goto("/dist/portfolio-icons.html?slow=4");
-  const record = () =>
-    page.evaluate(() => {
-      const seen: number[] = [];
-      (window as any).__bar = seen;
-      const tick = () => {
-        const bar = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="air-one"] .zoom-close-bar');
-        if (bar && document.querySelector(".zoom-root")!.hasAttribute("data-open")) seen.push(bar.style.opacity === "" ? 1 : Number(bar.style.opacity));
-        requestAnimationFrame(tick);
-      };
-      tick();
-    });
-  const seen = () => page.evaluate(() => (window as any).__bar as number[]);
-  await record();
+  // Every frame: the button's drawn opacity (bar × button), and any copy of it above the flight.
+  await page.evaluate(() => {
+    const seen: { phase: string; o: number; ghost: number | null }[] = [];
+    (window as any).__x = seen;
+    const tick = () => {
+      const root = document.querySelector<HTMLElement>(".zoom-root")!;
+      const button = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="air-one"] .zoom-close');
+      const ghost = document.querySelector<HTMLElement>(".zoom-flight .zoom-close");
+      if (button && root.hasAttribute("data-open"))
+        seen.push({
+          phase: root.dataset.phase!,
+          o: Number(getComputedStyle(button.parentElement!).opacity) * Number(getComputedStyle(button).opacity),
+          ghost: ghost ? Number(getComputedStyle(ghost).opacity) : null,
+        });
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  const seen = () => page.evaluate(() => (window as any).__x as { phase: string; o: number; ghost: number | null }[]);
   await page.locator(".tile").nth(0).click();
   await expect.poll(() => phase(page), { timeout: 8000 }).toBe("open");
+  await page.waitForTimeout(400);
   const opening = await seen();
-  expect(opening.slice(0, 3).every((o) => o < 0.3)).toBe(true); // not there on take-off
-  expect(opening[opening.length - 1]).toBe(1); // fully there once open
-  await record();
+  expect(opening.filter((f) => f.phase === "opening").every((f) => f.o < 0.05)).toBe(true); // hidden in flight
+  const landed = opening.filter((f) => f.phase === "open").map((f) => f.o);
+  expect(landed[0]).toBeLessThan(0.5); // fades in after landing…
+  expect(landed[landed.length - 1]).toBe(1); // …to full
+  await page.evaluate(() => ((window as any).__x.length = 0));
   await page.keyboard.press("Escape");
   await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
-  const closing = await seen();
-  expect(Math.min(...closing.slice(-3))).toBeLessThan(0.1); // gone before it lands
+  const ghosts = (await seen()).map((f) => f.ghost).filter((g): g is number => g !== null);
+  expect(ghosts.length).toBeGreaterThan(2); // a copy above the flying image…
+  expect(ghosts[0]).toBeGreaterThan(0.6);
+  expect(Math.min(...ghosts)).toBeLessThan(0.3); // …fading out
+  expect(await page.locator(".zoom-flight .zoom-close").count()).toBe(0); // and gone
 });

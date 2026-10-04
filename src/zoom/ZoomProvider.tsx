@@ -13,7 +13,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
+import { cancelFrame, frame, motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { REST, clamp, defaultTiming, springTo, type ZoomTiming } from "./springs";
 import { createFlight, measureHero, prepareSnapshot, radiusOf, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
 import { attachGestures, type DismissEdges, type GestureDismiss, type GesturePaging, type ZoomVelocity } from "./gestures";
@@ -722,17 +722,16 @@ export function ZoomProvider(props: ZoomProviderProps) {
         updateProgress(self);
         writeBar(self);
       });
-      it.progress.on("change", () => writeBar(self));
     }
     it.j = j;
     return it;
   };
   /**
-   * The close button's opacity, written on its own bar: it fades with the flight (squared,
-   * like the other cards, so it arrives late in an open and leaves early in a close), with
-   * its card, and in a stream as its card scrolls away. Its own opacity rather than its
-   * card's alone: the bar is sticky, and Safari can draw a sticky layer without its
-   * ancestors' opacity. (Where the card's opacity does reach it, it leaves a little ahead.)
+   * The close bar's opacity: with its card (written on the bar itself, since the bar is
+   * sticky and Safari can draw a sticky layer without its ancestors' opacity; where the
+   * card's opacity does reach it, it leaves a little ahead) and, in a stream, as its card
+   * scrolls away. While a card opens or closes the button itself is hidden by zoom.css and
+   * fades in once it has landed (it sits on the hero's corner, under the flying copy).
    */
   function writeBar(it: Item) {
     const card = cardEls.current.get(it.id);
@@ -743,9 +742,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       closeBars.set(card, bar);
     }
     if (!bar) return;
-    const progress = it.progress.get();
-    const p = Number.isFinite(progress) ? clamp(progress, 0, 1) : 1;
-    const o = it.barScroll * p * p * clamp(it.cv.o.get(), 0, 1);
+    const o = it.barScroll * clamp(it.cv.o.get(), 0, 1);
     bar.style.opacity = o >= 0.999 ? "" : String(o);
     bar.style.pointerEvents = o < 0.5 ? "none" : "";
   }
@@ -1791,6 +1788,41 @@ export function ZoomProvider(props: ZoomProviderProps) {
     return true;
   };
 
+  /**
+   * The closing card's button sits on its hero's corner, and the hero's flying copy is
+   * drawn above the cards, so the button would vanish under it at once. A copy of it
+   * fades out above the flight instead.
+   */
+  const fadeOutCloseButton = (id: string) => {
+    const button = cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-close-bar > *");
+    const layer = flightRef.current;
+    if (!button || !layer || S.phase !== "open") return;
+    const r = button.getBoundingClientRect();
+    const o = Number(getComputedStyle(button.parentElement!).opacity) * Number(getComputedStyle(button).opacity);
+    if (o < 0.05 || r.bottom < 0 || r.width === 0) return;
+    const at = rel(r);
+    const ghost = button.cloneNode(true) as HTMLElement;
+    ghost.removeAttribute("data-zoom-close");
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.tabIndex = -1;
+    Object.assign(ghost.style, { position: "absolute", left: `${at.x}px`, top: `${at.y}px`, right: "auto", bottom: "auto", margin: "0", pointerEvents: "none" });
+    layer.appendChild(ghost);
+    // It rides on the card's corner as the card heads home: the real, hidden button marks
+    // it, read once Motion has written the frame's card positions (else it trails a frame).
+    ghost.style.transformOrigin = "0 0";
+    const follow = () => {
+      if (!ghost.isConnected) return cancelFrame(follow);
+      const b = rel(button.getBoundingClientRect());
+      ghost.style.transform = `translate(${b.x - at.x}px, ${b.y - at.y}px) scale(${at.w ? b.w / at.w : 1})`;
+    };
+    frame.postRender(follow, true);
+    const ms = parseFloat(getComputedStyle(rootRef.current!).getPropertyValue("--zoom-close-fade")) || 200;
+    ghost.animate([{ opacity: o }, { opacity: 0 }], { duration: ms / speed(), easing: "ease-out", fill: "forwards" }).finished.then(
+      () => ghost.remove(),
+      () => ghost.remove(),
+    );
+  };
+
   /** Close from open, or turn an opening around. */
   const close = useCallback((v?: ZoomVelocity, closeOpts: { towardTargetOnly?: boolean; id?: string } = {}) => {
     if (S.phase !== "open" && S.phase !== "opening") return;
@@ -1808,6 +1840,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const active = sources.current.get(S.ids[S.index]);
     const scrolled = !S.reduced && active ? revealSource(active.el) : false;
     showHiddenSourceFor(S.index); // the visible item's place on the page, ready for it
+    if (!S.reduced) fadeOutCloseButton(S.ids[S.index]);
     setPhase("closing");
     emitAll("closing", interrupted);
     setBackgroundInert(false); // so tapping a source can turn the close around
