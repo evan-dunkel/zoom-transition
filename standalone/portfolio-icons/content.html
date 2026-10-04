@@ -1,0 +1,274 @@
+<!--
+  The portfolio, current work first. Same pattern as standalone/portfolio, plus:
+
+  1. Every source is in one group ("portfolio"), so everything opens into one stream.
+     data-zoom-section names each source's section; the stream shows that title above
+     the section's first card, styled like the page's own section titles (.section-title).
+  2. Two card styles, by how closely a piece is read: Air Apps case studies lead with a
+     large image (.piece-feature); personal projects, writing and About lead with an
+     icon beside the title (.piece-head).
+
+  [Bracketed text] is a placeholder to replace with your own.
+-->
+<main>
+  <header class="intro">
+    <h1>Your Name</h1>
+    <p>Product designer at Air Apps in San Francisco. I design consumer apps, and prototype the motion and gestures that make them feel native.</p>
+    <p class="note">Prototype. Open anything and keep scrolling: Air Apps, personal projects, writing and About follow in one stream. Swipe sideways, press Esc or ✕ to close.</p>
+  </header>
+
+  <section aria-labelledby="air-apps">
+    <h2 id="air-apps" class="section-title">Air Apps</h2>
+    <ul class="work">
+      <li><a class="tile" href="/work/air-one">
+        <div class="tile-image zoom-concentric" data-zoom-source="air-one" data-zoom-group="portfolio" data-zoom-section="Air Apps"><img src="images/air-one.svg" alt=""></div>
+        <h3>[Project name]</h3><p class="sub">Air Apps · Product designer · 2025</p>
+      </a></li>
+      <li><a class="tile" href="/work/air-two">
+        <div class="tile-image zoom-concentric" data-zoom-source="air-two" data-zoom-group="portfolio" data-zoom-section="Air Apps"><img src="images/air-two.svg" alt=""></div>
+        <h3>[Project name]</h3><p class="sub">Air Apps · Product designer · 2024</p>
+      </a></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="personal">
+    <h2 id="personal" class="section-title">Personal projects</h2>
+    <ul class="list">
+      <li><a class="item" href="/projects/zoom">
+        <div class="item-icon zoom-concentric" data-zoom-source="zoom" data-zoom-group="portfolio" data-zoom-section="Personal projects"><img src="images/zoom.svg" alt=""></div>
+        <div class="item-text"><h3>Zoom transitions</h3><p class="sub">Personal project · 2026</p><p>The open-in-place transitions this site runs on.</p></div>
+      </a></li>
+      <li><a class="item" href="/projects/personal-two">
+        <div class="item-icon zoom-concentric" data-zoom-source="personal-two" data-zoom-group="portfolio" data-zoom-section="Personal projects"><img src="images/personal.svg" alt=""></div>
+        <div class="item-text"><h3>[Project name]</h3><p class="sub">Personal project · [Year]</p><p>[One line on what it is.]</p></div>
+      </a></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="writing">
+    <h2 id="writing" class="section-title">Writing and experiments</h2>
+    <ul class="list">
+      <li><a class="item" href="/writing/interruptible">
+        <div class="item-icon zoom-concentric" data-zoom-source="interruptible" data-zoom-group="portfolio" data-zoom-section="Writing and experiments"><img src="../portfolio/images/interruptible.svg" alt=""></div>
+        <div class="item-text"><h3>Interruptible by default</h3><p class="sub">Essay · Sep 2026</p><p>Every transition should be able to change its mind halfway.</p></div>
+      </a></li>
+      <li><a class="item" href="/writing/springs">
+        <div class="item-icon zoom-concentric" data-zoom-source="springs" data-zoom-group="portfolio" data-zoom-section="Writing and experiments"><img src="../portfolio/images/springs.svg" alt=""></div>
+        <div class="item-text"><h3>Springs you can feel</h3><p class="sub">Experiment · Aug 2026</p><p>Matching SwiftUI’s duration-and-bounce springs on the web.</p></div>
+      </a></li>
+      <li><a class="item" href="/writing/shelf">
+        <div class="item-icon zoom-concentric" data-zoom-source="shelf" data-zoom-group="portfolio" data-zoom-section="Writing and experiments"><img src="../portfolio/images/shelf.svg" alt=""></div>
+        <div class="item-text"><h3>The shelf is the interface</h3><p class="sub">Essay · Jun 2026</p><p>Letting the page do the navigation.</p></div>
+      </a></li>
+      <li><a class="item" href="/writing/case-studies">
+        <div class="item-icon zoom-concentric" data-zoom-source="case-studies" data-zoom-group="portfolio" data-zoom-section="Writing and experiments"><img src="../portfolio/images/case-studies.svg" alt=""></div>
+        <div class="item-text"><h3>Case studies people finish</h3><p class="sub">Note · Feb 2026</p><p>A structure for readers with forty seconds.</p></div>
+      </a></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="about">
+    <h2 id="about" class="section-title">About</h2>
+    <ul class="list">
+      <li><a class="item" href="/about">
+        <div class="item-icon zoom-concentric" data-zoom-source="about" data-zoom-group="portfolio" data-zoom-section="About"><img src="images/portrait.svg" alt=""></div>
+        <div class="item-text"><h3>Your Name</h3><p class="sub">Product designer at Air Apps · San Francisco</p><p>3½ years in product design. Looking for a team that builds tools for designers.</p></div>
+      </a></li>
+    </ul>
+  </section>
+</main>
+
+<!-- Air Apps case studies: the image leads, full width on the card (data-zoom-hero). -->
+
+<template data-zoom-destination="air-one">
+  <article class="piece piece-feature">
+    <div class="piece-image zoom-concentric" data-zoom-hero><img src="images/air-one.svg" alt="[Describe the screens shown]"></div>
+    <div class="piece-text">
+      <h2>[Project name]</h2>
+      <p class="sub">Air Apps · Product designer · 2025</p>
+      <p class="lede">[One or two sentences: what the app is, who it’s for, and what changed because of your work. Lead with the outcome.]</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Product designer</dd></div><div><dt>Team</dt><dd>[n designers, n engineers]</dd></div><div><dt>Timeline</dt><dd>[n months]</dd></div><div><dt>Platform</dt><dd>[iOS, Android]</dd></div></dl>
+      <h3>[The problem]</h3>
+      <p>[What you knew going in: who was struggling, with what, and how you found out.]</p>
+      <h3>[The decision]</h3>
+      <p>[What you tried, what you chose, and why. One decision per section.]</p>
+      <h3>[The outcome]</h3>
+      <p>[What shipped and what changed, with a number if you have one.]</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="air-two">
+  <article class="piece piece-feature">
+    <div class="piece-image zoom-concentric" data-zoom-hero><img src="images/air-two.svg" alt="[Describe the screens shown]"></div>
+    <div class="piece-text">
+      <h2>[Project name]</h2>
+      <p class="sub">Air Apps · Product designer · 2024</p>
+      <p class="lede">[One or two sentences: what the app is, who it’s for, and what changed because of your work. Lead with the outcome.]</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Product designer</dd></div><div><dt>Team</dt><dd>[n designers, n engineers]</dd></div><div><dt>Timeline</dt><dd>[n months]</dd></div><div><dt>Platform</dt><dd>[iOS, Android]</dd></div></dl>
+      <h3>[The problem]</h3>
+      <p>[What you knew going in: who was struggling, with what, and how you found out.]</p>
+      <h3>[The decision]</h3>
+      <p>[What you tried, what you chose, and why. One decision per section.]</p>
+      <h3>[The outcome]</h3>
+      <p>[What shipped and what changed, with a number if you have one.]</p>
+    </div>
+  </article>
+</template>
+
+<!-- Personal projects, writing and About: an icon leads, the title beside it. -->
+
+<template data-zoom-destination="zoom">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="images/zoom.svg" alt="A tile growing into a card"></div>
+      <div class="piece-title"><h2>Zoom transitions</h2><p class="sub">Personal project · 2026</p></div>
+    </header>
+    <div class="piece-text">
+      <p class="lede">A transition system for opening things in place: a tile grows into its page, and closing puts it back where it was. I designed it, prototyped it three ways, and tuned it on real devices until it felt native. It’s what this site runs on.</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Design, prototyping</dd></div><div><dt>Built with</dt><dd>React, Motion, Claude Code</dd></div><div><dt>Prototypes</dt><dd>Shelves, feed, reading stream</dd></div><div><dt>Tests</dt><dd>81 automated browser tests</dd></div></dl>
+
+      <h3>Why build it</h3>
+      <p>Opening something in place keeps people oriented. The grid stays in their head, and closing puts the thing back where they found it. Native apps do this well. On the web it’s usually a timed crossfade that can’t be interrupted, so you wait for an animation you’ve already changed your mind about.</p>
+
+      <h3>Research</h3>
+      <p>I started from iOS: the zoom transition, App Store cards, and how a card follows your finger when you drag it closed. Three findings shaped the system.</p>
+      <ul class="proof">
+        <li><strong>Springs you can describe.</strong> SwiftUI defines springs by duration and bounce, which convert exactly to stiffness and damping. A value tuned on an iPhone feels the same in a browser.</li>
+        <li><strong>Interruptible means carrying speed.</strong> Every motion is a spring that keeps its velocity, so a close that turns into an open keeps moving instead of stopping dead.</li>
+        <li><strong>Corners are part of the motion.</strong> I fitted CSS’s superellipse corners to Figma’s iOS-style smoothing numerically: 1.23 times the radius at superellipse(1.36) lands within 0.7% of Figma’s curve, with the plain radius as the fallback where browsers can’t draw it.</li>
+      </ul>
+
+      <h3>Three prototypes, three questions</h3>
+      <p><strong>Shelves.</strong> Covers on horizontal shelves that open into a page you can swipe through. Does opening in place keep your place?</p>
+      <p><strong>Feed.</strong> A vertical, TikTok-style pager. Can browsing and closing share one surface: up and down to browse, sideways to close?</p>
+      <p><strong>Reading stream.</strong> Long case studies and essays as cards as tall as their content, in one continuous column. Can a reader scroll from one piece into the next without hitting a wall?</p>
+
+      <h3>Iteration</h3>
+      <p>Each round started with something that felt wrong in the hand, usually reported as a screenshot or a sketch, and ended with a change to the system rather than to one page.</p>
+      <ol class="log">
+        <li><strong>Closing felt busy.</strong> Every card flew home at once. Now only the card you’re reading flies home, and the rest wait behind, dimmed, fading with it.</li>
+        <li><strong>Fast scrolling hit walls.</strong> Paging between cards fought quick, repeated swipes. Telling a new swipe apart from the last one’s momentum helped, but a wall is still a wall. For long reads, I removed paging and made one continuous stream. When the fixes keep getting cleverer, change the model.</li>
+        <li><strong>The page behind kept changing.</strong> Tiles faded in and out as you read, which pulled the eye. Now the page holds still and swaps only when you close.</li>
+        <li><strong>Things popped at landing.</strong> The shadow appeared at the end, and corners jumped to their final radius. Both now follow the flight’s progress.</li>
+        <li><strong>A last-second stretch.</strong> Square thumbnails widened in a rush over the last fifth of the flight. Width and height now uncrop evenly with the scale. I measured it: the mismatch went from 0.10 to 0.003.</li>
+        <li><strong>Focus rings after a tap.</strong> Phones drew a ring on the close button after opening. The system now follows how you’re interacting: keyboard users get focus moved and returned, while taps and clicks leave nothing focused.</li>
+        <li><strong>A gesture that worked most of the time.</strong> Scrolling sideways to close felt right on touch, but trackpads mix sideways motion, vertical motion and momentum too unevenly. I added an axis lock and momentum handling, then turned it off on desktop by default. A gesture that usually works teaches people not to trust it.</li>
+      </ol>
+
+      <h3>Testing</h3>
+      <p>Feel is hard to argue about and easy to measure once you name it. Most fixes started as a failing test, checked against the old code before the change, so the problem can’t quietly come back.</p>
+      <ul class="proof">
+        <li><strong>Real input.</strong> Tests drive touch through Chrome’s DevTools protocol, trackpad swipes with simulated momentum, mouse drags and the keyboard.</li>
+        <li><strong>Frame by frame.</strong> Flights are sampled on every frame to check that the crop, corners and shadow move evenly with the motion.</li>
+        <li><strong>Pixel diffs.</strong> Refactors are checked against screenshots of every prototype, so cleaning up the system can’t change what people see.</li>
+        <li><strong>Real devices.</strong> The final word is an iPhone and a desktop trackpad.</li>
+      </ul>
+
+      <h3>What I learned</h3>
+      <p>Put the fix in the system. Nearly every issue was solved in the library rather than on the page, so a new layout inherits the fix instead of rediscovering the bug. Write the feeling down as a number, and a test can hold it. And leave a gesture out when it isn’t dependable.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="personal-two">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="images/personal.svg" alt=""></div>
+      <div class="piece-title"><h2>[Project name]</h2><p class="sub">Personal project · [Year]</p></div>
+    </header>
+    <div class="piece-text">
+      <p class="lede">[What it is and why you made it, in two sentences.]</p>
+      <dl class="facts"><div><dt>Role</dt><dd>[Design, code]</dd></div><div><dt>Built with</dt><dd>[Tools]</dd></div><div><dt>Timeline</dt><dd>[n weeks]</dd></div><div><dt>Status</dt><dd>[Live, prototype]</dd></div></dl>
+      <h3>[What you were exploring]</h3>
+      <p>[The question the project answered, and what you learned.]</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="interruptible">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="../portfolio/images/interruptible.svg" alt=""></div>
+      <div class="piece-title"><h2>Interruptible by default</h2><p class="sub">Essay · Sep 2026 · 6 min read</p></div>
+    </header>
+    <div class="piece-text">
+      <p>Watch someone use a phone for a minute and count how often they change their mind mid-gesture. They open something, see it isn’t what they wanted, and close it before it has finished opening.</p>
+      <blockquote>An animation that has to finish before you can act is a loading screen with better manners.</blockquote>
+      <h3>Carry the speed</h3>
+      <p>Making a transition interruptible is mostly bookkeeping. At the moment of interruption, take whatever is on screen, where it is and how fast it’s moving, and start the next spring from exactly there. A close that turns into an open keeps its momentum instead of stopping dead.</p>
+      <p>The hard part is everything you were tempted to fake: a shadow that only exists at the end, a crossfade timed to a duration. Each has to be expressed as a function of where things are, not of how long they’ve been going.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="springs">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="../portfolio/images/springs.svg" alt=""></div>
+      <div class="piece-title"><h2>Springs you can feel</h2><p class="sub">Experiment · Aug 2026 · 4 min read</p></div>
+    </header>
+    <div class="piece-text">
+      <p>Stiffness and damping are honest numbers, but nobody can picture them. Duration and bounce are numbers you can feel: half a second, a little bounce.</p>
+      <p>SwiftUI’s springs are defined that way, and they convert exactly to physical ones: stiffness is (2π / duration)², damping is 4π(1 − bounce) / duration. Hand those to any spring solver and a value tuned on an iPhone feels the same in a browser.</p>
+      <h3>What changed</h3>
+      <p>Tuning sessions got shorter. A designer can say “a bit quicker, less bounce” and the numbers move the same way. Closing runs 1.75 times faster than opening, which reads as the interface getting out of your way.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="shelf">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="../portfolio/images/shelf.svg" alt=""></div>
+      <div class="piece-title"><h2>The shelf is the interface</h2><p class="sub">Essay · Jun 2026 · 7 min read</p></div>
+    </header>
+    <div class="piece-text">
+      <p>In a good bookshop you never feel like you’re navigating. You pick something up, read the back, put it down where it was, and your eye is already on the next one. The shelf holds your place for you.</p>
+      <blockquote>The best back button is putting the thing back where you found it.</blockquote>
+      <h3>Putting it back</h3>
+      <p>A zoom that grows the book out of its spot, and shrinks it back into the same spot, keeps the shelf in your head the whole time. When only the book you were holding flies back, and the rest of the shelf waits behind, dimmed, the close feels like setting something down rather than tidying up a room.</p>
+    </div>
+  </article>
+</template>
+
+<template data-zoom-destination="case-studies">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="../portfolio/images/case-studies.svg" alt=""></div>
+      <div class="piece-title"><h2>Case studies people finish</h2><p class="sub">Note · Feb 2026 · 5 min read</p></div>
+    </header>
+    <div class="piece-text">
+      <p>The people reading your case study are hiring, and they have a stack of them. Give them the whole project in the first screen: what it was, what you did, and what changed.</p>
+      <blockquote>Lead with the outcome. The process is the reward for reading on.</blockquote>
+      <p>Everything after that is for the reader who decided to stay. Keep each section to one decision: what you knew, what you tried, what you chose and why.</p>
+    </div>
+  </article>
+</template>
+
+<!-- About + call to action: the last card in the stream. Written for a hiring manager
+     with a minute: what I do, proof, what I want next, and one easy way to reply. -->
+<template data-zoom-destination="about">
+  <article class="piece">
+    <header class="piece-head">
+      <div class="piece-icon zoom-concentric" data-zoom-hero><img src="images/portrait.svg" alt="Portrait"></div>
+      <div class="piece-title"><h2>Your Name</h2><p class="sub">Product designer at Air Apps · San Francisco</p></div>
+    </header>
+    <div class="piece-text">
+      <p class="lede">I design consumer apps at Air Apps, and I prototype in code: motion, gestures, and the small details that make an interface feel native.</p>
+      <dl class="facts"><div><dt>Experience</dt><dd>3½ years in product design</dd></div><div><dt>Now</dt><dd>Product designer, Air Apps</dd></div><div><dt>Based in</dt><dd>San Francisco</dd></div><div><dt>Focus</dt><dd>Interaction, motion, prototyping</dd></div></dl>
+      <h3>What I’m looking for</h3>
+      <p>A product design role on a team that builds tools for designers: canvases, prototyping, design systems. Engineers get prototypes they can run, with the motion and edge cases worked out, not just a spec.</p>
+      <ul class="proof">
+        <li><strong>[Air Apps outcome.]</strong> [What shipped, and the number that moved.]</li>
+        <li><strong>[Air Apps outcome.]</strong> [What shipped, and the number that moved.]</li>
+        <li><strong>Built the transitions on this site.</strong> Interruptible springs, smoothed corners, tuned on real devices.</li>
+      </ul>
+      <div class="cta zoom-concentric">
+        <h3>Let’s talk</h3>
+        <p>If your team is hiring, I’d love a call. I reply within a day.</p>
+        <p class="cta-email"><span data-email>you@example.com</span><button type="button" class="cta-button" data-copy-email>Copy email</button></p>
+      </div>
+    </div>
+  </article>
+</template>

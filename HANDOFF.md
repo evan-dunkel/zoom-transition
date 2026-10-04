@@ -39,7 +39,14 @@ demo/                main.tsx (layout switch), BookStore.tsx (shelves), BookFeed
                      feed), BookParts.tsx (covers, 3D book), books.ts, Portfolio.tsx +
                      portfolioContent.ts (portfolio prototype), demo.css
 standalone/portfolio/ the portfolio at its simplest (plain HTML + templates + one island), built
-                     to dist/portfolio.html by its build.py; the reference for mapping onto a site
+                     to dist/portfolio.html; the reference for mapping onto a site
+standalone/portfolio-icons/ a second portfolio prototype: one stream for every section (section
+                     titles between cards), image-led Air Apps cards, icon-led cards for the
+                     rest, About + CTA last; dist/portfolio-icons.html
+standalone/portfolio-sections/ the same content (included from portfolio-icons/content.html, settings
+                     from its mount.tsx), each section one continuous card, switchable delineations
+standalone/build.py  builds a folder into one self-contained HTML file (+ an -artifact variant):
+                     inlines linked stylesheets, the script, SVGs and <!-- include path --> markup
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
 tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)
@@ -112,12 +119,30 @@ behind is live and a tap can reopen).
   `cx, cy, s` (centre + uniform scale). `fit(rect)` = cover-fit scale + crop
   insets, so a square source can open into a wide hero without stretching.
 - `retarget(rect)` re-bases from the current state (springs keep velocity).
+- Flight DOM: `.zoom-clone` > `.zoom-clone-shadow` + `.zoom-clone-window` > copy (and live
+  host). The crop (aspect change between source and hero) shrinks the window to the
+  visible part with `overflow: hidden`, the blended radius and the hero's `corner-shape`;
+  the shadow layer takes the same inset, so it wraps the visible shape. Uncropped, the
+  window clips nothing (3D overhangs survive). The only clip-path left on the clone is the
+  scroll-follow band. (The crop used to be a clip-path on the clone: it cut the shadow and
+  squared the cropped corners, visible on writing thumbnails.) The visible rect's width and
+  height are each interpolated by the scale's progress (`crop(sv)`: `vw`, `vh` from `A` to
+  `B`, then divided by the scale). Deriving the crop from the cover fit at the current
+  scale instead left one side pinned until late, so a square thumbnail widened in a rush
+  over the last ~20% of the flight.
 - Shadow: the hero element's own `box-shadow` (read in `measureHero`) is moved off the
   copy onto a `.zoom-clone-shadow` layer behind it, whose opacity follows the item's
   `progress` (`shadowOpacity`). Sources rarely have the hero's shadow, so carried at
   full strength it popped on at take-off and off at landing; now it fades in with the
   open and out with the close, continuously through reversals. Only the hero's own
   shadow; shadows on elements inside it fly as they are.
+- Corners: the copy is scaled as a whole, which scaled its corners too (a 14 px corner
+  read ~10 px mid-flight, 1 px for a thumbnail, then jumped on landing). The provider
+  passes each end's on-screen radius (`radiusOf`: the element's own px radius, else its
+  first child's; the source on the page, the hero at its card's scale) and the flight
+  blends them by the same scale progress as the crop, writing `radius / scale` to the
+  copy, live host, shadow layer and clip. `retarget(rect, radius)` carries on from the
+  current corner. Non-px radii (percentages) are left alone.
 - `offset()` (added every frame): follows **content scrolled mid-flight**
   (`y = -(scrollNow - scroll0) * zs * cv.s`) and **paging mid-flight**
   (`(track - track0) * zs` along the pager's axis), so the hand-over is pixel-exact.
@@ -172,12 +197,12 @@ behind is live and a tap can reopen).
   to `1 − (1 − g) · p` where p is the visible card's progress (the fade with reduced
   motion), so the group dims as a card opens and returns as it lands. `markGroup` /
   `unmarkGroup` apply and clean up. Each source also has a share (`presenceOf(id)`, a
-  motion value multiplied in): 0 for the visible item's, 1 for the rest. When the
-  visible item changes while open (a page turn, or scrolling a stream on), `swapVisible`
-  springs the two shares (timing.fade) so one tile fades out as the other fades back
-  in, instead of a hard hide snapping across. Opening still hides the visible source
-  outright (`data-zoom-hidden`), since its flight lifts off exactly over it; a landing
-  card's source gets its share back at once.
+  motion value multiplied in): 0 for the hidden one, 1 for the rest. The page behind
+  stays still while open: changing the visible item (a page turn, scrolling a stream
+  on) doesn't touch it (a fading swap was distracting while reading). On close,
+  `showHiddenSourceFor(S.index)` swaps at once: the visible item's source is hidden for
+  its card to land in and the one hidden since opening (`S.hiddenAt`) comes back. A
+  landing card's source gets its share back at once.
 - `flyHome: "visible"` (`S.flyVisible`): in `transitionCards`, cards other than the
   visible one don't fly. Closing leaves them where the bake put them; reopening
   springs them back to their slots. `followVisible()` sets their `cv.o` to p², so they
@@ -186,12 +211,48 @@ behind is live and a tap can reopen).
   scroll-snap** (re-enabling snap caused a ~10 px jump after landing in Safari).
 - Sources ordered by DOM position (`compareDocumentPosition`).
 
-### Page state while open (fixed overlay)
+### Page state while open (overlay over the page)
+- Over the whole page (no container) the root is `.zoom-page`: `position: absolute` in the
+  page, placed by `placeOnPage()` over the viewport at the scroll position (measured at the
+  origin first, in case the containing block is offset), at open and on resize. Not fixed:
+  in iOS Safari (checked in the iOS 27 Simulator) fixed content is clipped at the viewport's
+  edge and a solid band, coloured from the fixed content at the edge, is painted under the
+  floating toolbar and the status bar; page content shows through both. Open, it clips
+  sideways (`overflow-x: clip`, so a pager's off-screen cards don't widen the page) and
+  overhangs vertically: dim, backdrop and a stream extend `--zoom-overscan` (30vh) past the
+  viewport, the stream with the same extra bottom padding so its last card rests above the
+  toolbar. Closed, the root clips everything, adding nothing to the page's size. During a
+  close the page can scroll again (see releaseScroll); the overlay then moves with it, so
+  `watchPage`/`followPage` measure the source relative to the overlay, not the screen.
+  At scroll 0 nothing of the page is above it, so the strip under the status bar shows the
+  page's background rather than the dim. The overhang below is only as much page as there
+  is under the viewport (up to 30vh; `placeOnPage` measures it with the root clipped and
+  sets `--zoom-overscan`): Safari counted a longer overhang as page height, so near the
+  page's end a reader could scroll into it during a close (scrolling is released then) and
+  the page snapped back once the overlay closed. At the very end there's no page under the
+  toolbar, so the page's own end shows there.
 - `lockScroll`/`unlockScroll`: `overflow: hidden` on `<html>`, plus
   `scrollbar-gutter: stable` when scrollbars take up space, so the page (and the
   sources cards land on) don't shift sideways. Previous inline styles are restored.
 - Unmounting the provider while not idle (route change, Astro page swap) restores
   scrolling, the background's `inert`, hidden sources, and removes flights.
+
+### Corners and backdrop (library CSS)
+
+`zoom.css` is in three labelled parts: mechanics (required), default look (all visual,
+`--zoom-*` driven) and debug aids. Selectors were split, not changed, so specificity is as
+before (pixel-identical). Not a cascade layer: unlayered page resets would beat it.
+
+`zoom.css` derives corner geometry from `--zoom-radius` and `--zoom-inset` (design values):
+the card's `border-radius` is `--zoom-card-radius` if set, else radius × `--zoom-smooth`;
+`corner-shape` is `--zoom-corner-shape`, else `--zoom-smooth-shape`; the close button's inset
+is `--zoom-close-inset`, else radius − size / 2; `.zoom-concentric` is (radius − inset) ×
+smooth. `corners.css` (optional) sets the smoothing tokens on `:root`. The derived values are
+computed where they're used (on the card, the button, the element with the class), so
+`--zoom-radius` can be set per container. `.zoom-backdrop` sits under `.zoom-dim` with
+`backdrop-filter: var(--zoom-backdrop-filter, none)`; its opacity is the dim's share of full
+strength (`backdropOpacity`, set beside `dimOpacity` in `updateDerived`), so the filter is
+complete when open even with a light dim (opacity on one element would fade the blur too).
 
 ### Card DOM
 ```
@@ -204,6 +265,10 @@ behind is live and a tap can reopen).
 ```
 The surface lives inside the scroller so the browser's native overscroll bounce
 moves the whole card (no seam). Do not move the background back onto `.zoom-card`.
+In a stream, the card also carries `data-zoom-section` and, at a section's ends,
+`data-zoom-section-start` / `-end` (plain props on the memoised `ZoomCard`, so paging still
+re-renders only two cards); the track sets `--zoom-gap`. Section titles are siblings of the
+cards in the track (`[data-zoom-section-title]`).
 
 ### History (`history` prop)
 - `session`: one entry on open; paging replaces the URL; Back closes.
@@ -211,6 +276,26 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
 - UI close calls `history.go(-depth)` and ignores the resulting popstate;
   `pendingPush` defers pushes until our own Back lands. Default URL `#id`; on the
   portfolio use real paths (`/writing/slug`) so reload lands on the static page.
+
+- Addresses (default `#id` only; a custom `url` is the item's own page): on mount the
+  hash is kept as `S.addressed`; once that source registers (`register`, or the next frame
+  if it already has) `openAddressed` rewrites the entry to the plain page and opens with
+  `S.instant`: the open sequence skips the zoom and flight (still working out `S.s0` for
+  later drags and closes) and calls `openDone` in the same frame. `pushEntry` then adds the
+  `#id` entry, so Back closes. Waiting on registration rather than a fixed frame: a single
+  rAF lost the race to the sources now and then. A `hashchange` within the page opens with
+  the normal flight and adopts the browser's entry (`fromPop` while opening, depth 1).
+
+- Scroll restoration: the browser restores the scroll position saved with the entry it
+  goes Back to, which undid the close's scroll to the source (the reader ended at the top
+  of the page and the card flew off screen below). `scrollRestoration` belongs to each
+  entry and a pushed entry inherits it, so `holdScroll` sets it to manual on the page's
+  entry before the first push and `releaseRestoration` (closeDone) puts it back.
+  Setting it just before our own `history.go(-n)` didn't work: that changes the entry
+  being left, not the one landed on.
+- `revealSource` (`"close"` default, `"read"`, false): `revealSource(el)` scrolls the source
+  into view centred when it's out of view, then `placeOnPage()` (over the whole page the
+  overlay just scrolled away with the page). "read" calls it from `setIndex` while open.
 
 ### Gestures (`gestures.ts`)
 - Touch uses touch events (decide axis on first move so native scroll and
@@ -237,8 +322,24 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   column so the card is at `top` (`scrollStreamTo`) and zooms from `slot(index)`.
   A scroll listener (once per frame, only while open) makes the card under the top
   third the visible one via `setIndex(i, quiet)`: no focus move or announcement, and
-  history replaces rather than pushes. `page(d)` scrolls instead (popstate). Flights
+  history replaces rather than pushes. `page(d)` scrolls instead (popstate).
+  On close (`close()`, phase open), the stream picks the card to send home first: the
+  close button's own card (`opts.id`, from gestures' click handler, the default
+  button's card or `ZoomCardContext.close`), else `dominantCard()`: the hero with the
+  highest visible area × visible share within the column, ties to the current card.
+  It becomes the index via `setIndex(j, true)` before anything else runs. A dismiss drag
+  moves the whole zoom, so changing the card at release doesn't jump. Flights
   following scroll use the column (`scrollerOf`); their clip is the column's band.
+  Each card's sticky close bar fades over the last 64 px as its card's bottom edge
+  reaches the button (set in the same per-frame scroll handler), instead of being cut
+  off. `.zoom-card-content` is `display: flow-root` so a destination's top margin stays
+  inside its card (in a stream nothing else contains it, and the card's surface started
+  below the margin, leaving the image flush with the top).
+  Wheel gestures in vertical layouts are locked to one axis (`wheelAxis`: decided on a
+  gesture's first event, released after 120 ms quiet, switched to sideways by a clearly
+  sideways event), and the stream has `overscroll-behavior-x: none`: a diagonal start
+  used to scroll the column, rubber-band sideways, then pull, which read as a jump.
+  A wheel pull that starts while a drag's spring-back is running picks up from there.
   Gestures: vertical drags and wheel are left native; sideways closes; a tap off every
   card closes; arrows scroll. The column stops scrolling while dragged or closing.
 - Vertical pager (`orientation: "vertical"`): the axes swap. Drag axis is decided
@@ -264,7 +365,9 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   Previously a swipe made while the last one's momentum (or the browser's bounce) was
   still running at the edge never counted, so the page was hard to turn. Dismiss arming
   (horizontal pager) is unchanged. Sideways swipes pull the card (same `pull` spring and
-  `pullBy`/`commitWheelDismiss`, mapped to x). Edge settings collapse to on/off
+  `pullBy`/`commitWheelDismiss`, mapped to x) only with `dismiss.wheelSideways` (default
+  false: trackpad sideways swipes weren't dependable enough on desktop); otherwise a
+  sideways wheel event is swallowed and does nothing. Edge settings collapse to on/off
   (`sidewaysOn`). Debug edge zones aren't drawn.
 - `swipeTail()` follows a swipe that has already acted (turned a page, closed the
   card) so its leftover momentum is ignored but a **new swipe acts at once**, even
@@ -393,6 +496,64 @@ See README for details.
 6. Option to auto-open from URL hash (`#id`) on load, if wanted.
 
 ## 9. Testing notes
+- iOS Safari, reported from a phone: a landed hero with both `box-shadow` and
+  `overflow: hidden` showed its shadow clipped to a square box and square corners (the
+  flying copy, which keeps shadow and clip on separate layers, looked right). Heroes with
+  a shadow now leave overflow visible and their image rounds itself (`border-radius:
+  inherit`); the flight writes the corner to a frozen copy's first child too when that
+  child carries one (`innerRound` in flight.ts). Not reproducible here (no WebKit in this
+  environment): the fix follows the copy's structure. Guarded on every prototype by
+  "heroes with a shadow don't clip their own overflow" (standalone-portfolio.spec.ts),
+  and the inner-corner tween by harness project C in flight-invariants.spec.ts.
+- The same report's "first open is cut off" reproduced on the phone (screen recording):
+  the first open after load lands offset; a reopen is right. Not reproduced in WebKitGTK
+  (installed from Ubuntu's archive: `webkit2gtk-driver`, `xvfb`; driven with Selenium over
+  WebKitWebDriver, since Playwright's WebKit download host is blocked), with cold caches,
+  or with long tasks injected into the first frames. The first-open screenshot showed the
+  flying copy still up, so that open hadn't finished. `standalone/diagnostics` logs the
+  zoom's state after each tap for reading on the device. Resolved by its log (iPhone,
+  screen 874): with the page at scroll 0 the claude.ai artifact viewer gives the page an
+  812px viewport that runs 70px under its translucent header; once the page is scrolled
+  it gives 742px, below the header. Our layout was identical in every open (overlay at
+  the viewport's top, title 8px down, column unscrolled, open done in under 1.5s), so the
+  title sat under the viewer's header only at scroll 0. Viewer chrome, not the library;
+  a site without the viewer doesn't have it.
+- Follow-up from the phone: on the first close the card landed too low, then jumped up.
+  The scroll lock was released only after landing; whatever that set off (the viewer
+  re-laying out the page by 70px) moved the source after the card had landed. The page
+  now scrolls again as the close starts (`releaseScroll`; the scrollbar gutter stays
+  reserved until the end; a close turned back into an open relocks), and a viewport
+  resize mid-close re-aims the cards like a page scroll does (`reaimSoon`). Guarded by
+  "if the page moves mid-close ... the card still lands on its source" (flight-invariants;
+  70px off without the re-aim). Diagnostics log each close frame by frame.
+  The next log showed the rest: 115ms into the close the viewer switched the page's
+  viewport 812→742 and moved the page's frame on screen with it, so in the page's
+  coordinates the tile moved up 70px while on screen it stayed put; the overlay, fixed to
+  that frame, jumped 70px down on screen and the re-aim glided it back. Now `followPage`
+  tells the two apart: a source moving with a viewport resize means the page moved under
+  the overlay at once, so the overlay's moving layers (zoomer, flight layer) get a CSS
+  `translate` by the same amount in that frame (`S.shift`; `rel()` subtracts it, so every
+  measurement stays in the shifted frame and springs are untouched); a move without a
+  resize is a scroll and re-aims. Cleared at closeDone and openDone. Guarded by "if a host
+  re-lays out the page mid-close ... without a jump" (68px jump without the shift).
+- Close buttons: the button sits on the hero's corner, under the hero's flying copy. While
+  a card opens or closes, zoom.css hides the real button and `followFlightButton` (Motion
+  postRender, so it doesn't trail the cards) draws a copy of the visible card's button in
+  the flight layer (`zIndex` 1, above the flying copies whichever was added first), on the
+  real button's spot each frame, at visible progress² × the bar's scroll fade. It follows
+  a close that turns around, and `openDone`/`closeDone` remove it in the frame the real
+  button shows, so there's no fade gap. Its state (`flightButton`) is a ref: when it was
+  per render, the render ending a flight couldn't see the copy the starting render made,
+  and both buttons showed for a frame. `writeBar` keeps the bar's own opacity = scroll fade
+  × card opacity (sticky layers can miss their ancestors' opacity in Safari).
+- `flight-invariants.spec.ts` guards what every layout inherits, on the plain harness
+  (`test/scan.html`: a square 12px tile opening into a 16:9, 32px hero with a shadow): even
+  crop, corner tween without a landing jump, shadow fading with the flight, focus by input
+  modality, derived corner geometry (`--zoom-radius`, `--zoom-inset`, `.zoom-concentric`,
+  the concentric close button), and the backdrop layer. Each flight test was checked to
+  fail with its old bug put back (corners off, shadow at full, the old crop).
+- Refactors that shouldn't change pixels: screenshot every prototype before and after and
+  compare (the corner-token move to the library was pixel-identical across 10 views).
 - `npm test` runs `tests/e2e` (@playwright/test, Chromium): per-edge dismiss options
   for wheel, touch and mouse drags (each "off" case is paired with the same gesture
   closing by default, so a passing "stays open" means something), debug bands per
@@ -406,8 +567,18 @@ See README for details.
   new swipes during momentum, quick flicks reading on, swipe distance, `atEdge` modes,
   no bounce. `portfolio.spec.ts` (stream): content-height cards in one column, scrolling
   straight through pieces with nothing cancelled, the sticky close button, only the
-  piece being read flying home, the card growing from behind the image, touch/wheel
-  close, writing as its own stream, Back.
+  piece being read flying home, the card growing from behind the image, touch close
+  (sideways wheel off by default), writing as its own stream, Back.
+  `standalone-portfolio.spec.ts` also checks the flight's crop grows evenly (visible width
+  and height reach the same share of the way on every frame). `standalone-portfolio-icons.spec.ts`:
+  one stream across sections with titles in the page's style, the opening title in view,
+  both card styles' geometry, one-line metadata, the About CTA's copy button, closing
+  across sections.
+  `standalone-portfolio-sections.spec.ts`: section markers, joined cards (touching, square
+  joins, rounded ends), a flying card rounded again, the delineation switcher, and fading
+  text never touching heroes.
+  `trackpad-paging.spec.ts` is timing-sensitive under load (fails occasionally with
+  `--repeat-each`, before and after these changes).
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
   the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).

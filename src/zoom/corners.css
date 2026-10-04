@@ -1,0 +1,14 @@
+/* Smoothed corners, matched to Figma's iOS-style corner smoothing (60%). Optional: load
+   after zoom.css. Write radii as their Figma values; zoom.css multiplies its corners by
+   --zoom-smooth, and your own elements can do the same:
+
+     border-radius: calc(12px * var(--zoom-smooth)); corner-shape: var(--zoom-smooth-shape);
+
+   Where the browser draws corner-shape, a superellipse fitted to Figma's curve (within
+   0.7% of the radius) needs a 1.23x box. Elsewhere the plain radius is the closest circle
+   (Figma's curve keeps the circle's middle arc, easing into the edges over 1.6x the
+   radius), so browsers without corner-shape fall back to the Figma radius as is. */
+:root { --zoom-smooth: 1; --zoom-smooth-shape: round; }
+@supports (corner-shape: superellipse(2)) {
+  :root { --zoom-smooth: 1.23; --zoom-smooth-shape: superellipse(1.36); }
+}

@@ -28,6 +28,7 @@ export type GestureDismiss = {
   dimFade: number;
   drag: DismissEdges;
   wheel: DismissEdges;
+  wheelSideways: boolean;
   wheelDistance: number;
   wheelEdgeSlop: number;
 };
@@ -57,7 +58,8 @@ export type GestureController = {
   page(direction: number): void;
   settlePage(i: number, velocity: number): void;
   /** velocity: of the shared zoom (x, y in px/s, s in scale/s) at the moment of release. */
-  close(velocity?: ZoomVelocity, opts?: { towardTargetOnly?: boolean }): void;
+  /** opts.id: the card to send home (its own close button); otherwise the provider picks. */
+  close(velocity?: ZoomVelocity, opts?: { towardTargetOnly?: boolean; id?: string }): void;
   /** Turn a close around, making `id` the visible card. */
   reopen(id: string): void;
   cancelDismiss(velocity: ZoomVelocity): void;
@@ -532,6 +534,17 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   /** Start pulling the card in `direction` (1 or -1), carrying on from a pull still springing back. */
   const beginPull = (direction: 1 | -1) => {
     W.pulling = direction;
+    if (!mapping) {
+      // A drag let go short of closing may still be springing the card back. Stop that
+      // and pick the pull up from where the card is, rather than snapping it to rest.
+      const L = c.layout();
+      const k = c.zs.get();
+      if (Math.abs(1 - k) > 0.001 || Math.abs(c.zx.get()) > 0.5 || Math.abs(c.zy.get()) > 0.5) {
+        [c.zx, c.zy, c.zs].forEach((v) => v.stop());
+        const { cx, cy } = pivot(direction);
+        pull.jump(L.vertical ? c.zx.get() - cx * (1 - k) : c.zy.get() - cy * (1 - k));
+      }
+    }
     // If the card is still springing back from a pull a moment ago, carry on
     // from where it visibly is instead of starting over from zero.
     const visible = pull.get();
@@ -626,12 +639,14 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     pullBy(dy);
   };
 
-  // Vertical pager: scrolling sideways pulls the card to close, either way. There's
-  // nothing to scroll sideways, so there's no edge to wait for: the pull starts at once.
+  // Vertical pager: with dismiss.wheelSideways, scrolling sideways pulls the card to
+  // close, either way. There's nothing to scroll sideways, so there's no edge to wait
+  // for: the pull starts at once. Off (the default), a sideways scroll does nothing.
   const onSidewaysWheel = (e: WheelEvent) => {
     // Always ours, so a sideways swipe never reaches the browser's swipe-back navigation.
     e.preventDefault();
-    if (!sidewaysOn(c.dismiss().wheel)) return;
+    const d = c.dismiss();
+    if (!d.wheelSideways || !sidewaysOn(d.wheel)) return;
     const dx = wheelDelta(e, "x");
     if (!dx) return;
     if (!W.pulling) beginPull(dx < 0 ? 1 : -1);
@@ -716,13 +731,29 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     pageClock(now);
     pageBy(dy);
   };
+  // Vertical layouts: each wheel gesture is locked to one axis. A trackpad swipe often
+  // starts a little diagonal; deciding per event let its first events scroll the column
+  // and the next ones pull the card, which showed as a jump before the pull. The lock is
+  // decided on a gesture's first event and released after a pause, or switched to
+  // sideways by a clearly sideways event (a new swipe over the last one's momentum,
+  // which only ever moves the way it was going).
+  const AX = { axis: null as "x" | "y" | null, lastT: 0 };
+  const wheelAxis = (e: WheelEvent) => {
+    const now = performance.now();
+    const dx = Math.abs(e.deltaX);
+    const dy = Math.abs(e.deltaY);
+    if (now - AX.lastT > 120) AX.axis = null;
+    AX.lastT = now;
+    if (AX.axis === "y" && dx > 4 && dx > dy * 2) AX.axis = "x";
+    if (!AX.axis) AX.axis = dx > dy ? "x" : "y";
+    return AX.axis;
+  };
   const onWheel = (e: WheelEvent) => {
     if (c.phase() !== "open") return;
-    const sideways = Math.abs(e.deltaX) > Math.abs(e.deltaY);
     if (c.layout().vertical) {
-      if (sideways) onSidewaysWheel(e);
+      if (wheelAxis(e) === "x") onSidewaysWheel(e); // its vertical part doesn't scroll either
       else if (!c.layout().stream) onVerticalPagingWheel(e); // a stream just scrolls
-    } else if (sideways) onHorizontalWheel(e);
+    } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) onHorizontalWheel(e);
     else onVerticalWheel(e);
   };
 
@@ -746,7 +777,8 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     }
     if (phase !== "open" && phase !== "opening") return;
     if (target.closest("[data-zoom-close]")) {
-      c.close();
+      // A close button closes its own card (in a stream, more than one can be in view).
+      c.close(undefined, { id: target.closest<HTMLElement>("[data-zoom-id]")?.dataset.zoomId });
       return;
     }
     if (c.layout().stream) {

@@ -1,0 +1,60 @@
+/* Delineations between works in a joined section, from basic to playful. Each is one
+   block for [data-delineation="name"] (set on <html> by the switcher; add the name to
+   the list in island.tsx). Hooks, from style.css:
+
+     --join-space                     extra room above each work but a section's first
+     .zoom-card-content::before       the divider, absolutely placed at the work's top
+     [data-zoom-section-start] / -end  the first and last work of a section
+
+   Keep data-zoom-hero elements out of any opacity or transform effect: the flying copy
+   is taken from the hero as it looks at that moment. */
+
+/* Line: a semi-opaque hairline, inset to the text. */
+[data-delineation="line"] { --join-space: 14px; }
+[data-delineation="line"] .zoom-card-content::before { left: 22px; right: 22px; height: 1px; background: var(--line); }
+
+/* Space: nothing drawn, just room. */
+[data-delineation="space"] { --join-space: 56px; }
+
+/* Receipt: a perforated tear line, with half-circle notches cut from both edges. */
+[data-delineation="receipt"] { --join-space: 22px; }
+[data-delineation="receipt"] .zoom-card-content::before {
+  left: 16px;
+  right: 16px;
+  top: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--line) 60%, transparent 0) 0 0 / 10px 2px repeat-x;
+}
+[data-delineation="receipt"] .zoom-root[data-phase="open"] .zoom-card[data-zoom-section] .zoom-card-content {
+  --nt: 0px; /* notch radius at the top corners… */
+  --nb: 0px; /* …and at the bottom ones */
+  -webkit-mask: radial-gradient(circle var(--nt) at 0 0, #0000 98%, #000) top left / 51% 51% no-repeat,
+    radial-gradient(circle var(--nt) at 100% 0, #0000 98%, #000) top right / 51% 51% no-repeat,
+    radial-gradient(circle var(--nb) at 0 100%, #0000 98%, #000) bottom left / 51% 51% no-repeat,
+    radial-gradient(circle var(--nb) at 100% 100%, #0000 98%, #000) bottom right / 51% 51% no-repeat;
+  mask: radial-gradient(circle var(--nt) at 0 0, #0000 98%, #000) top left / 51% 51% no-repeat,
+    radial-gradient(circle var(--nt) at 100% 0, #0000 98%, #000) top right / 51% 51% no-repeat,
+    radial-gradient(circle var(--nb) at 0 100%, #0000 98%, #000) bottom left / 51% 51% no-repeat,
+    radial-gradient(circle var(--nb) at 100% 100%, #0000 98%, #000) bottom right / 51% 51% no-repeat;
+}
+[data-delineation="receipt"] .zoom-root[data-phase="open"] .zoom-card[data-zoom-section]:not([data-zoom-section-start]) .zoom-card-content { --nt: 9px; }
+[data-delineation="receipt"] .zoom-root[data-phase="open"] .zoom-card[data-zoom-section]:not([data-zoom-section-end]) .zoom-card-content { --nb: 9px; }
+
+/* Gradient: each work starts with a soft wash of colour that fades into the page. */
+[data-delineation="gradient"] { --join-space: 18px; }
+[data-delineation="gradient"] .zoom-card-content::before {
+  height: 160px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--accent) 12%, transparent), transparent);
+}
+
+/* Fade: blocks of text fade in as they rise into view and out as they leave, so the
+   eye rests on what's being read. Scroll-driven, so browsers without it just skip it. */
+[data-delineation="fade"] { --join-space: 40px; }
+@keyframes join-fade { 0% { opacity: 0.15; } 18% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0.15; } }
+@supports (animation-timeline: view()) {
+  [data-delineation="fade"] .zoom-root[data-phase="open"] :is(.piece-text > *, .piece-title) {
+    animation: join-fade linear both;
+    animation-timeline: view();
+    animation-range: cover;
+  }
+}

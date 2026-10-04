@@ -13,8 +13,10 @@ const cards = (page: Page) =>
     }),
   );
 const streamTop = (page: Page) => page.locator(STREAM).evaluate((el) => el.scrollTop);
-/** The piece whose tile is gone from the index (hidden, or faded right out): the one being read. */
-const reading = (page: Page) =>
+/** The piece being read: the address follows it ("#id", replaced as you scroll). */
+const reading = (page: Page) => page.evaluate(() => decodeURIComponent(location.hash.slice(1)));
+/** Tiles hidden on the index. */
+const hiddenTiles = (page: Page) =>
   page.locator(".pf-tile-art").evaluateAll((els) =>
     els
       .filter((el) => getComputedStyle(el).visibility === "hidden" || Number(getComputedStyle(el).opacity) < 0.01)
@@ -53,7 +55,7 @@ test("each piece is a card as tall as its content, in one column, opened at the 
 test("scrolling runs straight through one piece into the next, and the piece being read follows", async ({ page }) => {
   await openPortfolio(page);
   await openProject(page, 1);
-  expect(await reading(page)).toEqual(["Fernwood Reader"]);
+  expect(await reading(page)).toBe("fernwood-reader");
   // Count wheel events the page cancels: a stream never holds scrolling back.
   await page.evaluate(() => {
     (window as any).__held = 0;
@@ -63,10 +65,11 @@ test("scrolling runs straight through one piece into the next, and the piece bei
   await wheel(page, 50, 60); // 3000 px: past the end of Fernwood and well into Atlas
   await expect.poll(() => streamTop(page)).toBeGreaterThan(start + 2800);
   expect(await page.evaluate(() => (window as any).__held)).toBe(0);
-  await expect.poll(() => reading(page)).toEqual(["Atlas Clinic"]);
+  await expect.poll(() => reading(page)).toBe("atlas-clinic");
+  expect(await hiddenTiles(page)).toEqual(["Fernwood Reader"]); // the index behind didn't change
   // And back up again, just as freely.
   await wheel(page, -50, 60);
-  await expect.poll(() => reading(page)).toEqual(["Fernwood Reader"]);
+  await expect.poll(() => reading(page)).toBe("fernwood-reader");
 });
 
 test("the close button stays in view while reading", async ({ page }) => {
@@ -85,7 +88,7 @@ test("closing sends home only the piece being read; the others stay put and fade
     const atlas = document.querySelector<HTMLElement>('[data-zoom-id="atlas-clinic"]')!;
     el.scrollTop = atlas.offsetTop - 8;
   });
-  await expect.poll(() => reading(page)).toEqual(["Atlas Clinic"]);
+  await expect.poll(() => reading(page)).toBe("atlas-clinic");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
   const a = await cards(page);
@@ -118,8 +121,8 @@ test("the image sits on the card, and the card grows out from behind it", async 
     const hero = document.querySelector<HTMLElement>('[data-zoom-id="tidewater-transit"] [data-zoom-hero]')!.getBoundingClientRect();
     return { inset: hero.left - card.left, top: hero.top - card.top };
   });
-  expect(rest.inset).toBeGreaterThan(10);
-  expect(rest.top).toBeGreaterThan(10);
+  expect(rest.inset).toBeGreaterThanOrEqual(8);
+  expect(rest.top).toBeCloseTo(rest.inset, 0); // as far in at the top as at the sides
 });
 
 test("a vertical drag scrolls; a sideways drag closes", async ({ page }) => {
@@ -144,7 +147,7 @@ test("a vertical drag scrolls; a sideways drag closes", async ({ page }) => {
   await expect.poll(() => phase(page), { timeout: 3000 }).toBe("idle");
 });
 
-test("scrolling sideways closes", async ({ page }) => {
+test("scrolling sideways doesn't close: on desktop that's off by default", async ({ page }) => {
   await openPortfolio(page);
   await openProject(page, 0);
   await page.mouse.move(215, 450);
@@ -152,7 +155,8 @@ test("scrolling sideways closes", async ({ page }) => {
     await page.mouse.wheel(40, 0);
     await page.waitForTimeout(30);
   }
-  await expect.poll(() => phase(page), { timeout: 3000 }).toBe("idle");
+  await page.waitForTimeout(600);
+  expect(await phase(page)).toBe("open");
 });
 
 test("writing is its own stream, and the last piece offers the way back", async ({ page }) => {
@@ -163,7 +167,8 @@ test("writing is its own stream, and the last piece offers the way back", async 
   await page.locator(STREAM).evaluate((el) => (el.scrollTop = el.scrollHeight));
   await page.locator(".zoom-card").last().locator(".pf-back").click();
   await expect.poll(() => phase(page)).toBe("idle");
-  await expect(page.locator(".pf-row").last()).toBeFocused();
+  // Closed with a click: nothing is left focused (no ring around the row on touch screens).
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 });
 
 test("Back closes", async ({ page }) => {
@@ -173,29 +178,23 @@ test("Back closes", async ({ page }) => {
   await expect.poll(() => phase(page)).toBe("idle");
 });
 
-test("moving on to the next piece fades its tile out softly, and the last one's back in", async ({ page }) => {
+test("the index stays still while reading; closing hides the piece being read at once", async ({ page }) => {
   await openPortfolio(page);
   await openProject(page, 1);
-  const look = (n: number) =>
-    page.locator(".pf-tile-art").nth(n).evaluate((el) => ({
-      opacity: Number(getComputedStyle(el).opacity),
-      hidden: getComputedStyle(el).visibility === "hidden",
-    }));
+  expect(await hiddenTiles(page)).toEqual(["Fernwood Reader"]);
   await page.locator(STREAM).evaluate((el) => {
     const atlas = document.querySelector<HTMLElement>('[data-zoom-id="atlas-clinic"]')!;
     el.scrollTop = atlas.offsetTop - 8;
   });
-  // Part-way through the swap: neither tile has snapped.
-  await page.waitForTimeout(90);
-  const atlasMid = await look(2);
-  const fernMid = await look(1);
-  expect(atlasMid.hidden).toBe(false);
-  expect(atlasMid.opacity).toBeGreaterThan(0.02);
-  expect(fernMid.hidden).toBe(false);
-  expect(fernMid.opacity).toBeLessThan(0.33);
-  // Settled: the piece being read is gone from the index, the last one is dimmed with the rest.
-  await page.waitForTimeout(700);
-  expect(await reading(page)).toEqual(["Atlas Clinic"]);
-  expect((await look(2)).opacity).toBe(0);
-  expect((await look(1)).opacity).toBeCloseTo(0.35, 2);
+  await expect.poll(() => reading(page)).toBe("atlas-clinic");
+  // Scrolling on changed nothing behind: no tile faded out or back in.
+  await page.waitForTimeout(400);
+  expect(await hiddenTiles(page)).toEqual(["Fernwood Reader"]);
+  const fern = () => page.locator(".pf-tile-art").nth(1).evaluate((el) => Number(getComputedStyle(el).opacity));
+  // On close, at once: Atlas's place is emptied for its card, Fernwood's comes back.
+  await page.keyboard.press("Escape");
+  expect(await hiddenTiles(page)).toEqual(["Atlas Clinic"]);
+  expect(await fern()).toBeGreaterThan(0.3);
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+  expect(await hiddenTiles(page)).toEqual([]);
 });

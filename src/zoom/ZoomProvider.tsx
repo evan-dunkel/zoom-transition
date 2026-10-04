@@ -1,4 +1,5 @@
 import {
+  Fragment,
   createContext,
   memo,
   useCallback,
@@ -12,9 +13,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
+import { cancelFrame, frame, motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { REST, clamp, defaultTiming, springTo, type ZoomTiming } from "./springs";
-import { createFlight, measureHero, prepareSnapshot, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
+import { createFlight, measureHero, prepareSnapshot, radiusOf, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
 import { attachGestures, type DismissEdges, type GestureDismiss, type GesturePaging, type ZoomVelocity } from "./gestures";
 
 /* ------------------------------------------------------------------ types */
@@ -70,6 +71,13 @@ export type ZoomDismiss = {
    * Default: top only. Add the bottom with { bottom: true }.
    */
   wheel: ZoomEdges;
+  /**
+   * Vertical layouts (feed, stream): also close by scrolling sideways with a trackpad
+   * or a tilting wheel. Off by default: trackpad swipes mix sideways and vertical
+   * motion, and momentum, too unevenly for it to feel dependable. A sideways touch or
+   * mouse drag closes either way.
+   */
+  wheelSideways: boolean;
   /** How far (in px of scrolling) past the edge closes the card. */
   wheelDistance: number;
   /** A swipe that starts with the content within this many px of an edge can close the card. */
@@ -115,6 +123,7 @@ const defaultDismiss: ZoomDismiss = {
   dimFade: 0.65,
   drag: DEFAULT_EDGES,
   wheel: DEFAULT_EDGES,
+  wheelSideways: false,
   wheelDistance: 240,
   wheelEdgeSlop: 32,
 };
@@ -124,7 +133,7 @@ export type ZoomProviderProps = {
   children?: ReactNode;
   /** The destination for a source: any React content. Mark its shared element with <ZoomHero>. */
   renderDestination: (id: string) => ReactNode;
-  /** Element the overlay is portalled into (must be positioned). Defaults to document.body, as a fixed overlay. */
+  /** Element the overlay is portalled into (must be positioned). Defaults to document.body, over the viewport. */
   container?: () => HTMLElement | null;
   /** Element made inert while a destination is open (the page behind). */
   background?: () => HTMLElement | null;
@@ -199,6 +208,22 @@ export type ZoomProviderProps = {
    * "/writing/slug") so a reload or shared link lands on that item's own page.
    */
   history?: false | { mode: "session" | "item"; url?: (id: string) => string };
+  /**
+   * Stream: the title shown above the first card of each section (sources give theirs
+   * with data-zoom-section, or ZoomSource's section prop). Defaults to the section's
+   * name in an h2.zoom-stream-title; style that like the page's own section titles.
+   */
+  renderSectionTitle?: (section: string) => ReactNode;
+  /**
+   * Keeping the page behind on the piece being read, so a close lands where the reader
+   * is, not where they started. The source is scrolled into view, centred, only when it's
+   * out of view:
+   * - "close" (default): the moment a close starts.
+   * - "read": each time the visible piece changes while open, so nothing moves at close.
+   *   For a backdrop the page can't be seen through (opaque, or heavily blurred).
+   * - false: never.
+   */
+  revealSource?: "close" | "read" | false;
   /** Draw tuning aids: the wheel-dismiss edge zones in each card. */
   debug?: boolean;
   /** Accessible name for each destination card. */
@@ -222,7 +247,7 @@ type Layout = {
   /** One natively scrolled column of content-height cards (implies vertical). */
   stream: boolean;
 };
-type SourceEntry = { id: string; group: string; el: HTMLElement };
+type SourceEntry = { id: string; group: string; el: HTMLElement; section?: string };
 type CardValues = { x: MotionValue<number>; y: MotionValue<number>; s: MotionValue<number>; o: MotionValue<number> };
 type HeroContent = { children: ReactNode; className?: string; style?: CSSProperties; live: boolean };
 type Item = {
@@ -255,6 +280,8 @@ type Item = {
   api: ItemApi;
   /** The card's scale when sitting on its source. */
   sLand: number;
+  /** Stream: how much of the close button its card's scrolling leaves visible (0 to 1). */
+  barScroll: number;
 };
 
 const defaultGeometry: ZoomGeometry = { side: 18, gap: 8, top: 24, bottom: 14, maxCardWidth: 720 };
@@ -459,11 +486,16 @@ type ZoomCardProps = {
   renderDestination: (id: string) => ReactNode;
   closeButton: ZoomProviderProps["closeButton"];
   closeLabel: string;
-  close: () => void;
+  close: (id?: string) => void;
   /** Debug edge zones, when drawn. */
   zones: { slop: number; edges: DismissEdges } | null;
   makeContext: (id: string, j: number, active: boolean) => CardContextValue;
   setCardEl: (id: string, el: HTMLElement | null) => void;
+  /** Stream: the card's section, and whether it starts or ends it (for styling joins).
+   *  Plain values, so the memo still holds. */
+  section?: string;
+  sectionStart?: boolean;
+  sectionEnd?: boolean;
 };
 /**
  * One page of the pager. Memoised, so paging (which changes which card is active)
@@ -485,6 +517,9 @@ const ZoomCard = memo(function ZoomCard({
   zones,
   makeContext,
   setCardEl,
+  section,
+  sectionStart,
+  sectionEnd,
 }: ZoomCardProps) {
   const cardContext = useMemo(() => makeContext(id, j, active), [makeContext, id, j, active]);
   const heroContext = useMemo(
@@ -492,14 +527,19 @@ const ZoomCard = memo(function ZoomCard({
     [item, phase],
   );
   const ref = useCallback((el: HTMLElement | null) => setCardEl(id, el), [setCardEl, id]);
+  const closeThis = useCallback(() => close(id), [close, id]);
   const v = item.cv;
   return (
     <motion.article
       ref={ref}
       className="zoom-card"
       data-zoom-id={id}
+      data-zoom-section={section}
+      data-zoom-section-start={sectionStart ? "" : undefined}
+      data-zoom-section-end={sectionEnd ? "" : undefined}
       aria-label={label}
       inert={!active && !layout.stream}
+      tabIndex={-1}
       style={{
         // In a stream, cards sit in the column's own flow at their content's height.
         ...(layout.stream
@@ -523,7 +563,7 @@ const ZoomCard = memo(function ZoomCard({
               {/* Inside the scrolled content (and sticky), so it rides the
                   browser's overscroll bounce with the rest of the card. */}
               <div className="zoom-close-bar">
-                <CloseButton option={closeButton} label={closeLabel} close={close} />
+                <CloseButton option={closeButton} label={closeLabel} close={closeThis} />
               </div>
               {renderDestination(id)}
               {zones && <EdgeZones slop={zones.slop} edges={zones.edges} />}
@@ -549,6 +589,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const phaseMV = useMotionValue<Phase>("idle");
   const cardEls = useRef(new Map<string, HTMLElement>());
   const items = useRef(new Map<string, Item>());
+  /** Each card's close bar, looked up once (null: a custom close button without one). */
+  const closeBars = useRef(new WeakMap<HTMLElement, HTMLElement | null>()).current;
   const rootRef = useRef<HTMLDivElement>(null);
   const zoomerRef = useRef<HTMLDivElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
@@ -581,6 +623,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
     refocus: false,
     /** History entries this provider has added on top of the page's own. */
     histDepth: 0,
+    /** The next open is already open: the page loaded at an item's address. */
+    instant: false,
+    /** The page's scrollRestoration, while our own Back is set to manual. */
+    restoration: null as ScrollRestoration | null,
+    /** The item the page's address named when it loaded, until its source registers. */
+    addressed: null as string | null,
     /** popstate events caused by our own history.go(), to be ignored. */
     ignorePops: 0,
     /** An entry to add once our own pending history.go() has landed. */
@@ -589,13 +637,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
     fromPop: false,
     /** The page's own overflow and scrollbar-gutter styles while we lock scrolling. */
     scrollLock: null as { overflow: string; gutter: string } | null,
+    /**
+     * How far the page has moved under the overlay at once during a close (a host
+     * re-laying it out, the viewport changing size), applied to the overlay's moving
+     * layers so nothing jumps on screen. rel() works in the shifted frame.
+     */
+    shift: { x: 0, y: 0 },
+    /** While closing: a source on the page, and where it was last seen (viewport px). */
+    pageRef: null as { el: HTMLElement; left: number; top: number; vw: number; vh: number } | null,
     sessionKey: 0,
-    /** Portalled into document.body as a fixed overlay (no container given). */
+    /** Portalled into document.body, over the viewport (no container given). */
     fixed: false,
     /** groupOpacity for this session (null: the group is hidden or shown as hideGroupWhileOpen says). */
     groupOpacity: null as number | null,
     /** flyHome is "visible" for this session: the other cards fade with the visible one. */
     flyVisible: false,
+    /** groupOpacity: the index of the item whose source is hidden on the page. */
+    hiddenAt: 0,
+    /** The last input was the keyboard (not a pointer): decides where focus goes. */
+    keyboard: false,
   }).current;
 
   // The shared zoom: the whole pager (card, metadata, neighbours) scales together.
@@ -605,7 +665,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const zs = useMotionValue(1);
   const zoomOpacity = useMotionValue(1);
   const dimOpacity = useMotionValue(0);
+  /** The backdrop filter's layer: the dim's share of full strength (0 to 1), so a light
+   *  dim still gets a complete blur. */
+  const backdropOpacity = useMotionValue(0);
   const fade = useMotionValue(0); // reduced motion only
+  /** Stream section titles: they fade in and out with the neighbouring cards. */
+  const extrasOpacity = useMotionValue(1);
 
   const timing = (): ZoomTiming => ({ ...defaultTiming, ...latest.current.timing });
   const landing = (): ZoomLanding => ({ ...defaultLanding, ...latest.current.landing });
@@ -656,6 +721,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         landed: false,
         offOpacity: null,
         sLand: NaN,
+        barScroll: 1,
       };
       items.current.set(id, it);
       const self = it;
@@ -676,11 +742,34 @@ export function ZoomProvider(props: ZoomProviderProps) {
         },
       };
       cv.s.on("change", () => updateProgress(self));
-      cv.o.on("change", () => updateProgress(self));
+      cv.o.on("change", () => {
+        updateProgress(self);
+        writeBar(self);
+      });
     }
     it.j = j;
     return it;
   };
+  /**
+   * The close bar's opacity: with its card (written on the bar itself, since the bar is
+   * sticky and Safari can draw a sticky layer without its ancestors' opacity; where the
+   * card's opacity does reach it, it leaves a little ahead) and, in a stream, as its card
+   * scrolls away. While a card opens or closes the button itself is hidden by zoom.css and
+   * fades in once it has landed (it sits on the hero's corner, under the flying copy).
+   */
+  function writeBar(it: Item) {
+    const card = cardEls.current.get(it.id);
+    if (!card) return;
+    let bar = closeBars.get(card);
+    if (bar === undefined) {
+      bar = card.querySelector<HTMLElement>(".zoom-close-bar");
+      closeBars.set(card, bar);
+    }
+    if (!bar) return;
+    const o = it.barScroll * clamp(it.cv.o.get(), 0, 1);
+    bar.style.opacity = o >= 0.999 ? "" : String(o);
+    bar.style.pointerEvents = o < 0.5 ? "none" : "";
+  }
   const resetItem = (it: Item) => {
     it.values.forEach((v) => v.mv.jump(v.initial));
     endFlight(it);
@@ -689,6 +778,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     it.offOpacity = null;
     it.landed = false;
     it.sLand = NaN;
+    it.barScroll = 1;
     it.cv.x.jump(0);
     it.cv.y.jump(0);
     it.cv.s.jump(1);
@@ -722,7 +812,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
       return;
     }
     S.histDepth += 1;
+    holdScroll();
     window.history.pushState({ zoom: id, depth: S.histDepth }, "", urlFor(id));
+  };
+  /**
+   * Going Back to the page (ours on close, or the browser's), the browser would restore
+   * the scroll position it saved for the page's entry, where the reader opened from,
+   * undoing the scroll to the source the close makes. The setting belongs to each entry
+   * (a pushed one inherits it), so it's set to manual on the page's entry before the first
+   * push, and put back once the close has landed.
+   */
+  const holdScroll = () => {
+    if (S.restoration !== null) return;
+    S.restoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+  };
+  const releaseRestoration = () => {
+    if (S.restoration === null || (window.history.state && typeof window.history.state === "object" && "zoom" in window.history.state)) return;
+    window.history.scrollRestoration = S.restoration;
+    S.restoration = null;
   };
   /**
    * The visible item changed: a new entry ("item" mode) or just a new address ("session"
@@ -792,15 +900,18 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const sc = streamRef.current;
     const card = cardEls.current.get(S.ids[j]);
     if (!sc || !card) return;
-    const top = Math.max(0, card.offsetTop - S.L!.top);
+    // A card that starts a section opens with its section's title in view above it.
+    const title = card.previousElementSibling as HTMLElement | null;
+    const from = title?.hasAttribute("data-zoom-section-title") ? title.offsetTop : card.offsetTop;
+    const top = Math.max(0, from - S.L!.top);
     if (smooth) sc.scrollTo({ top, behavior: "smooth" });
     else sc.scrollTop = top;
   };
   /** A movement of the track, as screen x/y. */
   const alongTrack = (d: number) => (S.L!.vertical ? { x: 0, y: d } : { x: d, y: 0 });
   const rel = (r: DOMRect, root: DOMRect = rootRef.current!.getBoundingClientRect()): Rect => ({
-    x: r.left - root.left,
-    y: r.top - root.top,
+    x: r.left - root.left - S.shift.x,
+    y: r.top - root.top - S.shift.y,
     w: r.width,
     h: r.height,
   });
@@ -876,6 +987,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     pre: ReturnType<typeof prepareFlight>,
     /** Heading into the card: the track position its landing spot was worked out for. */
     toCardTrack: number | null = null,
+    /** Corner radius (on-screen px) where it takes off and where it lands. */
+    radii?: { from: number; to: number },
   ) {
     const content = heroContent.current.get(it.id);
     const live = !!content?.live;
@@ -902,6 +1015,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       // The hero's shadow belongs to it in the card, not on the source: it fades in as
       // the card opens and out as it closes, following the item's progress.
       shadowOpacity: () => it.progress.get(),
+      radii,
       // Once it's following scrolled content, the copy is part of that content: hide
       // whatever has scrolled past the card's top or bottom edge, like the rest of it.
       clip: () => {
@@ -935,10 +1049,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   /* -------------------------------------------------------------- dim & fades */
 
-  const restingDim = () => {
+  /** The dim's share of full strength while open: dragging a card fades some of it. */
+  const restingShare = () => {
     const d = dismiss();
-    return S.dimMax * (1 - clamp((1 - zs.get()) / d.maxShrink, 0, 1) * d.dimFade);
+    return 1 - clamp((1 - zs.get()) / d.maxShrink, 0, 1) * d.dimFade;
   };
+  const restingDim = () => S.dimMax * restingShare();
   /** How far the active card is between its source (0) and fully open (1). */
   const activeProgress = () => {
     const it = items.current.get(S.ids[S.index]);
@@ -992,6 +1108,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       S.ids.forEach((id, j) => {
         if (j !== S.index) getItem(id, j).cv.o.set(p * p);
       });
+      extrasOpacity.set(p * p);
     }
   };
   const updateDerived = () => {
@@ -1001,6 +1118,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       const f = clamp(fade.get(), 0, 1);
       zoomOpacity.set(f);
       dimOpacity.set(restingDim() * f);
+      backdropOpacity.set(restingShare() * f);
     } else if (S.mode === "cards") {
       // Continuous from wherever the dim was when this transition started,
       // heading to full dim when open and to none at the sources.
@@ -1010,14 +1128,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
         p >= p0 ? (p0 >= 0.999 ? S.dimMax : d0 + ((S.dimMax - d0) * (p - p0)) / (1 - p0)) : p0 <= 0.001 ? 0 : (d0 * p) / p0;
       zoomOpacity.set(1);
       dimOpacity.set(d);
+      backdropOpacity.set(S.dimMax > 0 ? clamp(d / S.dimMax, 0, 1) : clamp(p, 0, 1));
     } else if (S.phase === "opening") {
       const t = clamp((zs.get() - S.s0) / (1 - S.s0), 0, 1);
       dimOpacity.set(S.dimMax * t);
+      backdropOpacity.set(t);
       // Only the smallest quarter of the zoom fades, so the card never pops in.
       zoomOpacity.set(clamp(t * 4, 0, 1));
     } else {
       zoomOpacity.set(1);
       dimOpacity.set(restingDim());
+      backdropOpacity.set(restingShare());
     }
   };
   useEffect(() => {
@@ -1043,6 +1164,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const register = useCallback((entry: SourceEntry) => {
     sources.current.set(entry.id, entry);
+    // The page loaded at this item's address: open it once its group has registered too.
+    if (entry.id === S.addressed) requestAnimationFrame(() => openAddressed.current());
     return () => {
       if (sources.current.get(entry.id)?.el === entry.el) sources.current.delete(entry.id);
     };
@@ -1058,24 +1181,32 @@ export function ZoomProvider(props: ZoomProviderProps) {
         // Hidden outright while its card or flight covers it; its share stays 0 after.
         if (hideVisible) el.dataset.zoomHidden = "";
         presenceOf(id).jump(0);
+        S.hiddenAt = j;
       } else {
         delete el.dataset.zoomHidden;
         presenceOf(id).jump(1);
       }
     });
   };
-  /** The visible item changed while open: its source fades out as the last one's fades back in. */
-  const swapVisible = (previous: number, next: number) => {
-    const spec = timing().fade;
-    const prevEl = sources.current.get(S.ids[previous])?.el;
-    if (prevEl) {
-      delete prevEl.dataset.zoomHidden;
-      prevEl.dataset.zoomDimmed = "";
+  /**
+   * The page behind stays exactly as it was while a card is open: changing which piece
+   * is visible (a page turn, scrolling a stream on) doesn't touch it, because tiles
+   * changing in the background while you read are a distraction. On close the swap
+   * happens at once: the visible item's source is hidden (its card is about to land
+   * there) and the one hidden since opening comes back with the rest of the group.
+   */
+  const showHiddenSourceFor = (index: number) => {
+    if (S.groupOpacity === null || S.hiddenAt === index) return;
+    const was = sources.current.get(S.ids[S.hiddenAt])?.el;
+    if (was) delete was.dataset.zoomHidden;
+    presenceOf(S.ids[S.hiddenAt]).jump(1);
+    const now = sources.current.get(S.ids[index])?.el;
+    if (now) {
+      now.dataset.zoomDimmed = "";
+      now.dataset.zoomHidden = "";
     }
-    const nextEl = sources.current.get(S.ids[next])?.el;
-    if (nextEl) nextEl.dataset.zoomDimmed = "";
-    springTo(presenceOf(S.ids[previous]), 1, spec, { restDelta: REST.opacity, speed: speed() });
-    springTo(presenceOf(S.ids[next]), 0, spec, { restDelta: REST.opacity, speed: speed() });
+    presenceOf(S.ids[index]).jump(0);
+    S.hiddenAt = index;
   };
   const unmarkGroup = (el: HTMLElement) => {
     delete el.dataset.zoomDimmed;
@@ -1104,7 +1235,29 @@ export function ZoomProvider(props: ZoomProviderProps) {
     });
   };
 
-  // As a fixed overlay, the page behind stops scrolling while open. Where scrollbars
+  /**
+   * Over the whole page, the overlay is part of the page (zoom.css, .zoom-page): placed
+   * over the viewport at the page's scroll position. Its containing block may be offset
+   * (a positioned body), so it's measured at the origin first.
+   */
+  const placeOnPage = () => {
+    const root = rootRef.current;
+    if (!S.fixed || !root) return;
+    const html = document.documentElement;
+    Object.assign(root.style, { right: "auto", bottom: "auto", left: "0px", top: "0px", width: `${html.clientWidth}px`, height: `${html.clientHeight}px` });
+    const r = root.getBoundingClientRect();
+    root.style.left = `${-r.left}px`;
+    root.style.top = `${-r.top}px`;
+    // The overhang below (under a phone's toolbar): as much page as there is below the
+    // viewport, up to 30vh, measured with the overlay's own overhang clipped away.
+    const scroller = document.scrollingElement ?? html;
+    root.style.overflow = "clip";
+    const below = scroller.scrollHeight - (scroller.scrollTop + html.clientHeight);
+    root.style.overflow = "";
+    root.style.setProperty("--zoom-overscan", `${Math.max(0, Math.min(below, innerHeight * 0.3))}px`);
+  };
+
+  // Over the whole page, the page behind stops scrolling while open. Where scrollbars
   // take up space (Windows, Linux, some macOS settings), their gutter is kept so the
   // page doesn't reflow sideways, which would also move the sources cards land on.
   const lockScroll = () => {
@@ -1114,6 +1267,38 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.scrollLock = { overflow: html.style.overflow, gutter: html.style.scrollbarGutter };
     if (scrollbar > 0) html.style.scrollbarGutter = "stable";
     html.style.overflow = "hidden";
+  };
+  /**
+   * Closing: the page scrolls again as soon as the close starts, not once it's done, so
+   * whatever that sets off (a host re-laying out the page, the browser's own toolbars)
+   * moves the sources early, while the cards can still re-aim at them (see onAnyScroll
+   * and the resize listener), instead of after they've landed. The scrollbar gutter stays
+   * reserved until the end, so the page doesn't reflow sideways under the landing cards.
+   */
+  const releaseScroll = () => {
+    if (S.scrollLock) document.documentElement.style.overflow = S.scrollLock.overflow;
+  };
+  /** Closing: start watching a source, to tell the page moving under the overlay. */
+  const watchPage = (el: HTMLElement | null) => {
+    if (!el) return (S.pageRef = null);
+    // Relative to the overlay: over the whole page it's part of the page, and moves with it.
+    const r = el.getBoundingClientRect();
+    const o = rootRef.current!.getBoundingClientRect();
+    const vv = window.visualViewport;
+    S.pageRef = { el, left: r.left - o.left, top: r.top - o.top, vw: vv?.width ?? innerWidth, vh: vv?.height ?? innerHeight };
+  };
+  const applyShift = () => {
+    const t = S.shift.x || S.shift.y ? `${S.shift.x}px ${S.shift.y}px` : "";
+    for (const el of [zoomerRef.current, flightRef.current]) if (el) el.style.translate = t;
+  };
+  const clearShift = () => {
+    S.shift = { x: 0, y: 0 };
+    S.pageRef = null;
+    applyShift();
+  };
+  /** A close turned back into an open: lock again. */
+  const relockScroll = () => {
+    if (S.scrollLock) document.documentElement.style.overflow = "hidden";
   };
   const unlockScroll = () => {
     if (!S.scrollLock) return;
@@ -1142,6 +1327,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const ids = latest.current.paging === false ? [id] : orderedIds(entry.group);
     S.ids = ids;
     S.index = ids.indexOf(id);
+    placeOnPage(); // before measuring: the overlay is over the viewport where the page is now
     S.L = computeLayout();
     S.reduced = !!reduceRef.current;
     const d = latest.current.dim;
@@ -1151,7 +1337,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.pendingOpen = id;
     S.origin = entry.el;
     S.mode = "zoom";
+    extrasOpacity.jump(1);
     setPhase("opening");
+    startFlightButton();
     ids.forEach((i, j) => resetItem(getItem(i, j)));
     track.jump(trackAt(S.index)); // so the freshly mounted track renders in place
     updateAllFocus();
@@ -1161,11 +1349,66 @@ export function ZoomProvider(props: ZoomProviderProps) {
     pushEntry(id);
   }, []);
 
+  /**
+   * A page loaded at an item's address (#id, the default addresses) opens with that item
+   * open. The entry becomes the plain page with the item's entry above it, as if it had
+   * been tapped, so Back closes it and stays on the page. A custom history url is the
+   * item's own page, so there's nothing to open over.
+   */
+  /** The item the address names (default #id addresses only); `known`: one of ours. */
+  const addressedId = (known = true) => {
+    const h = historyOption();
+    if (!h || h.url || location.hash.length < 2) return null;
+    try {
+      const id = decodeURIComponent(location.hash.slice(1));
+      return !known || sources.current.has(id) ? id : null;
+    } catch {
+      return null;
+    }
+  };
+  // Opens the item the page loaded at, already open, once its source has registered.
+  const openAddressed = useRef(() => {});
+  openAddressed.current = () => {
+    const id = S.addressed;
+    if (!id || S.phase !== "idle" || !sources.current.has(id)) return;
+    S.addressed = null;
+    window.history.replaceState(null, "", location.pathname + location.search);
+    S.instant = true;
+    open(id);
+  };
+  useEffect(() => {
+    // Sources may register before this runs (their effects come first) or later.
+    S.addressed = addressedId(false);
+    const raf = requestAnimationFrame(() => openAddressed.current());
+    // The address changed within the page (typed, or a link to #id): open it as a tap
+    // would. The browser has already added the entry, so it's adopted, not added again.
+    const onHash = () => {
+      S.addressed = null;
+      const id = addressedId();
+      if (!id || S.phase !== "idle") return;
+      S.fromPop = true; // no entry of our own
+      try {
+        open(id);
+      } finally {
+        S.fromPop = false;
+      }
+      S.histDepth = 1;
+      window.history.replaceState({ zoom: id, depth: 1 }, "", urlFor(id));
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, []);
+
   // First open from idle: runs after the cards mount but before they paint.
   useLayoutEffect(() => {
     if (!session || !S.pendingOpen) return;
     const id = S.pendingOpen;
     S.pendingOpen = null;
+    const instant = S.instant; // (with reduced motion it fades in as usual)
+    S.instant = false;
     const gen = ++S.gen;
     const root = rootRef.current!;
     const zoomer = zoomerRef.current!;
@@ -1206,10 +1449,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (L.stream) scrollStreamTo(S.index);
     const at = slot(S.index);
 
+    if (instant) {
+      // Opened from the address as the page loaded: already open, no flight. The zoom it
+      // would have started from is still worked out, for dragging and closing later.
+      S.s0 = zoomOnto(rel(S.origin!.getBoundingClientRect()), at.x, at.y).s;
+      zx.jump(0);
+      zy.jump(0);
+      zs.jump(1);
+      hideForOpen();
+      root.dataset.open = "";
+      emitAll("opening");
+      openDone();
+      return;
+    }
+
     // Measure at full size first, before the zoom is applied (and before any writes).
     const card = cardEls.current.get(id)!;
     const hero = heroFor(id);
     const src = rel(S.origin!.getBoundingClientRect());
+    const srcRadius = radiusOf(S.origin!);
     let heroTarget: Rect | null = null;
     const pre = hero ? prepareFlight(id, hero) : null;
     if (hero) {
@@ -1241,7 +1499,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     it.sLand = z.s;
     if (hero && heroTarget && pre) {
       it.srcFit = fitOf(pre.metrics, src);
-      const f = startFlight(it, hero, src, heroTarget, pre, trackAt(S.index));
+      const f = startFlight(it, hero, src, heroTarget, pre, trackAt(S.index), { from: srcRadius, to: pre.metrics.ownRadius });
       anims.push(
         springTo(f.cx, f.to.cx, T.open, { speed: sp }),
         springTo(f.cy, f.to.cy, T.open, { speed: sp }),
@@ -1265,9 +1523,29 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const sc = streamRef.current;
     if (!session || !sc) return;
     let raf = 0;
+    // Each card's close button sticks to the top while its card is in view. As the
+    // card scrolls away its bottom edge would cut the button off; instead it fades out
+    // over the last CLOSE_FADE px. Everything is read first, then written.
+    const CLOSE_FADE = 64;
+    const fadeCloseButtons = () => {
+      const reads = S.ids.map((id) => {
+        const card = cardEls.current.get(id);
+        const bar = card?.querySelector<HTMLElement>(".zoom-close-bar");
+        const button = bar?.firstElementChild as HTMLElement | null | undefined;
+        if (!card || !bar || !button) return null;
+        return { bar, room: card.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom };
+      });
+      reads.forEach((r, j) => {
+        if (!r) return;
+        const it = getItem(S.ids[j], j);
+        it.barScroll = clamp(r.room / CLOSE_FADE, 0, 1);
+        writeBar(it);
+      });
+    };
     const pick = () => {
       raf = 0;
       if (S.phase !== "open") return;
+      fadeCloseButtons();
       const box = sc.getBoundingClientRect();
       const line = box.top + box.height / 3;
       let best = S.index;
@@ -1306,19 +1584,34 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const gesturesRef = useRef<{ refresh(): void } | null>(null);
 
   const openDone = () => {
+    clearShift(); // a close turned around after the page moved (rare): settle in the plain frame
+    streamRef.current?.querySelectorAll<HTMLElement>("[data-zoom-section-title]").forEach((el) => (el.style.transform = ""));
     S.mode = "zoom";
     // Drag progress is measured against the visible item's own source.
     const active = items.current.get(S.ids[S.index]);
     if (active && Number.isFinite(active.sLand)) S.s0 = active.sLand;
     setPhase("open");
+    endFlightButton(); // the real button shows from this frame
     updateAllProgress();
     emitAll("opened");
     gesturesRef.current?.refresh();
     prefreezeStaticHeroes();
     updateDerived();
-    const card = cardEls.current.get(S.ids[S.index]);
-    card?.querySelector<HTMLElement>("[data-zoom-close]")?.focus({ preventScroll: true });
+    focusCard(S.index);
   };
+
+  /**
+   * Focus moves into the open card, so the dialog is where assistive tech and the
+   * keyboard are. Keyboard users land on the close button. After a tap or click the
+   * card itself takes focus instead: a focused button shows its ring on touch screens
+   * (iOS Safari draws it for programmatic focus), which reads as a glitch.
+   */
+  function focusCard(index: number) {
+    const card = cardEls.current.get(S.ids[index]);
+    if (!card) return;
+    const target = S.keyboard ? card.querySelector<HTMLElement>("[data-zoom-close]") ?? card : card;
+    target.focus({ preventScroll: true });
+  }
 
   /* -------------------------------------------------------------- paging */
 
@@ -1329,14 +1622,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.index = i;
     if (previous !== i && (S.phase === "open" || S.phase === "opening")) {
       recordPage(S.ids[i], quiet);
+      // revealSource "read": the page behind follows the piece being read.
+      const el = latest.current.revealSource === "read" && S.phase === "open" ? sources.current.get(S.ids[i])?.el : null;
+      if (el) revealSource(el);
       const prevId = S.ids[previous];
       if (prevId) emit(getItem(prevId, previous), "deactivated");
       emit(getItem(S.ids[i], i), "activated");
     }
     if (S.phase === "open" && latest.current.hideGroupWhileOpen === false && S.groupOpacity === null) hideForOpen();
     if (S.groupOpacity !== null) {
-      if (S.phase === "open" && previous !== i) swapVisible(previous, i);
-      else if (S.phase === "opening") hideForOpen();
+      // While open, the page behind is left alone (see showHiddenSourceFor).
+      if (S.phase === "opening") hideForOpen();
     }
     if (S.flyVisible) followVisible();
     setIndexState(i);
@@ -1348,7 +1644,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     gesturesRef.current?.refresh();
     if (!S.refocus || S.phase !== "open") return;
     S.refocus = false;
-    cardEls.current.get(S.ids[index])?.querySelector<HTMLElement>("[data-zoom-close]")?.focus({ preventScroll: true });
+    focusCard(index);
   }, [index]);
 
   // Also while opening: the cards and the flying hero slide over without restarting.
@@ -1407,6 +1703,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
         vs: Z.vs * C.s + Z.s * C.vs,
       });
     });
+    // Stream section titles aren't cards: hold each where it is on screen by giving it
+    // the zoom being folded away (they fade out with the close from there).
+    if (L.stream) {
+      const sc = streamRef.current;
+      sc?.querySelectorAll<HTMLElement>("[data-zoom-section-title]").forEach((el) => {
+        const px = el.offsetLeft;
+        const py = el.offsetTop - (sc?.scrollTop ?? 0);
+        el.style.transformOrigin = "0 0";
+        el.style.transform = `translate(${Z.x + Z.s * px - px}px, ${Z.y + Z.s * py - py}px) scale(${Z.s})`;
+      });
+    }
     zx.jump(0);
     zy.jump(0);
     zs.jump(1);
@@ -1446,6 +1753,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
             offset: heroOffset(id),
             heroRect: hero ? rel(hero.getBoundingClientRect(), rootBox) : null,
             dest: src ? rel(src.el.getBoundingClientRect(), rootBox) : null,
+            destRadius: src ? radiusOf(src.el) : 0,
             // Only cards without a flight in the air will need a new one.
             pre: hero && !it.flight ? prepareFlight(id, hero) : null,
             metrics: hero ? measureHero(hero) : null,
@@ -1553,7 +1861,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
           it.flightScroll0 = target === "open" ? scrollerOf(id)?.scrollTop ?? 0 : null;
           it.flightScrollNow = it.flightScroll0 ?? 0;
           it.flightTrack0 = target === "open" ? trackAt(index) : null;
-          f.retarget(heroTarget);
+          f.retarget(heroTarget, target === "sources" ? m.destRadius : m.metrics?.ownRadius ?? 0);
           anims.push(
             springTo(f.cx, f.to.cx, spec, { velocity: vcx, restDelta: restPx, speed: sp }),
             springTo(f.cy, f.to.cy, spec, { velocity: vcy, restDelta: restPx, speed: sp }),
@@ -1561,7 +1869,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
           );
         } else {
           const from = wasLanded ? dest : m.heroRect!;
-          startFlight(it, hero, from, heroTarget, m.pre ?? prepareFlight(id, hero), target === "open" ? trackAt(index) : null);
+          // Corners: the source's on the page; the hero's at whatever scale its card is at.
+          const heroRadius = m.metrics?.ownRadius ?? 0;
+          const radii = {
+            from: wasLanded ? m.destRadius : heroRadius * (m.metrics ? m.heroRect!.w / m.metrics.W0 : 1),
+            to: target === "sources" ? m.destRadius : heroRadius,
+          };
+          startFlight(it, hero, from, heroTarget, m.pre ?? prepareFlight(id, hero), target === "open" ? trackAt(index) : null, radii);
           // The hero was moving with its card: its centre's speed follows from the card's.
           const f = it.flight!;
           const fvx = wasLanded ? 0 : toward(cvx + cvs * (off.x + off.w / 2), f.to.cx - f.cx.get());
@@ -1640,26 +1954,91 @@ export function ZoomProvider(props: ZoomProviderProps) {
       hidden = r.left < left - 0.5 || r.top < top - 0.5 || r.right > left + p.clientWidth + 0.5 || r.bottom > top + p.clientHeight + 0.5;
     }
     if (!hidden) return false;
+    // Centred, so the card lands mid-screen with its neighbours around it.
     try {
-      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" as ScrollBehavior });
+      el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" as ScrollBehavior });
     } catch {
-      el.scrollIntoView({ block: "nearest", inline: "nearest" }); // older Safari has no "instant"
+      el.scrollIntoView({ block: "center", inline: "nearest" }); // older Safari has no "instant"
     }
+    // Over the whole page the overlay is part of the page and just scrolled away with it:
+    // back over the viewport (the cards, placed within it, stay where they are on screen).
+    placeOnPage();
     return true;
   };
 
+  /**
+   * The visible card's close button during a flight. The button sits on its hero's corner,
+   * and the hero's flying copy is drawn above the cards, so the real button (hidden by
+   * zoom.css while a card opens or closes) can't be seen there. A copy rides above the
+   * flight instead: on the real button's spot every frame (read after Motion has written
+   * the frame's card positions, so it doesn't trail), with the flight's progress squared,
+   * so it arrives late in an open and leaves early in a close, and follows a close that
+   * turns around. At landing the real button takes over in the same frame.
+   */
+  // One copy and one follower for the provider's life (not per render), so whichever
+  // render ends a flight removes the copy the starting render made.
+  const flightButton = useRef({ el: null as HTMLElement | null, id: "", follow: null as (() => void) | null }).current;
+  function followFlightButton() {
+    if (S.phase !== "opening" && S.phase !== "closing") return endFlightButton();
+    const id = S.ids[S.index];
+    const button = cardEls.current.get(id)?.querySelector<HTMLElement>(".zoom-close-bar > *");
+    const layer = flightRef.current;
+    if (!button || !layer) return;
+    if (flightButton.id !== id || !flightButton.el) {
+      flightButton.el?.remove();
+      const ghost = button.cloneNode(true) as HTMLElement;
+      ghost.removeAttribute("data-zoom-close");
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.tabIndex = -1;
+      ghost.classList.add("zoom-flight-close");
+      // zIndex: above the flying copies, whichever was added to the layer first.
+      Object.assign(ghost.style, { position: "absolute", zIndex: "1", left: "0", top: "0", right: "auto", bottom: "auto", margin: "0", transformOrigin: "0 0", pointerEvents: "none" });
+      layer.appendChild(ghost);
+      flightButton.el = ghost;
+      flightButton.id = id;
+    }
+    const b = rel(button.getBoundingClientRect());
+    const w = button.offsetWidth || 1;
+    const p = clamp(visibleProgress(), 0, 1);
+    const bar = parseFloat(button.parentElement!.style.opacity || "1"); // a stream's scroll fade
+    flightButton.el.style.transform = `translate(${b.x}px, ${b.y}px) scale(${b.w / w})`;
+    flightButton.el.style.opacity = String(p * p * bar);
+  }
+  function startFlightButton() {
+    if (latest.current.closeButton === false) return;
+    flightButton.follow ??= followFlightButton;
+    frame.postRender(flightButton.follow, true);
+  }
+  function endFlightButton() {
+    if (flightButton.follow) cancelFrame(flightButton.follow);
+    flightButton.el?.remove();
+    flightButton.el = null;
+    flightButton.id = "";
+  }
+
   /** Close from open, or turn an opening around. */
-  const close = useCallback((v?: ZoomVelocity, closeOpts: { towardTargetOnly?: boolean } = {}) => {
+  const close = useCallback((v?: ZoomVelocity, closeOpts: { towardTargetOnly?: boolean; id?: string } = {}) => {
     if (S.phase !== "open" && S.phase !== "opening") return;
     const interrupted = S.phase === "opening";
+    // Stream: send home the piece you're looking at. Its own close button names it;
+    // otherwise it's the card whose image is most in view, which can differ from the
+    // card under the top third (a tall piece's text above, the next one's image below).
+    if (S.L?.stream && S.phase === "open") {
+      const j = closeOpts.id !== undefined ? S.ids.indexOf(closeOpts.id) : dominantCard();
+      if (j >= 0 && j !== S.index) setIndex(j, true);
+    }
     leaveHistory();
     // Read (and scroll, if needed) before writing anything, so the browser only
     // recalculates styles once at the moment of release.
     const active = sources.current.get(S.ids[S.index]);
-    const scrolled = !S.reduced && active ? revealSource(active.el) : false;
+    const scrolled = !S.reduced && active && latest.current.revealSource !== false ? revealSource(active.el) : false;
+    showHiddenSourceFor(S.index); // the visible item's place on the page, ready for it
     setPhase("closing");
+    startFlightButton();
     emitAll("closing", interrupted);
     setBackgroundInert(false); // so tapping a source can turn the close around
+    releaseScroll();
+    watchPage(active?.el ?? null);
     const gen = ++S.gen;
 
     if (S.reduced) {
@@ -1674,13 +2053,43 @@ export function ZoomProvider(props: ZoomProviderProps) {
     else transitionCards("sources", S.index, v, closeOpts);
   }, []);
 
+  /**
+   * Stream: the card whose hero is most in view, or the visible card if no other's is.
+   * Scored by visible area times the share of the hero that's visible, so a whole icon
+   * beats a sliver of a large image, and most of a large image beats a whole icon.
+   */
+  const dominantCard = () => {
+    const view = streamRef.current?.getBoundingClientRect();
+    if (!view) return S.index;
+    const score = (id: string) => {
+      const hero = heroFor(id);
+      if (!hero) return 0;
+      const r = hero.getBoundingClientRect();
+      const area = r.width * r.height;
+      const w = Math.min(r.right, view.right) - Math.max(r.left, view.left);
+      const h = Math.min(r.bottom, view.bottom) - Math.max(r.top, view.top);
+      if (area <= 0 || w <= 0 || h <= 0) return 0;
+      return (w * h) ** 2 / area;
+    };
+    let best = S.index;
+    let bestScore = score(S.ids[S.index]);
+    S.ids.forEach((id, j) => {
+      if (j === S.index) return;
+      const s = score(id);
+      if (s > bestScore) [best, bestScore] = [j, s];
+    });
+    return best;
+  };
+
   /** Turn a close around: every card heads back to open, with `id` as the visible one. */
   const reopen = (id: string) => {
     if (S.phase !== "closing") return;
     const j = S.ids.indexOf(id);
     if (j < 0) return;
     setPhase("opening");
+    startFlightButton();
     setBackgroundInert(true);
+    relockScroll();
     if (j !== S.index) setIndex(j);
     pushEntry(id);
     emitAll("opening", true);
@@ -1697,6 +2106,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   };
 
   const closeDone = () => {
+    endFlightButton();
+    releaseRestoration();
     presence.current.forEach((mv) => mv.jump(1)); // before the group is unmarked below
     S.ids.forEach((id, j) => {
       const it = getItem(id, j);
@@ -1712,6 +2123,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     });
     setBackgroundInert(false);
     unlockScroll();
+    clearShift();
     S.offDim?.();
     S.offDim = null;
     S.mode = "zoom";
@@ -1723,9 +2135,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
     zs.jump(1);
     zoomOpacity.jump(1);
     dimOpacity.jump(0);
+    backdropOpacity.jump(0);
     setSession(null);
-    const focusable = focusTarget?.closest<HTMLElement>("button, a[href], [tabindex]") ?? focusTarget;
-    focusable?.focus({ preventScroll: true });
+    // Keyboard users get focus back on what they opened. After a tap or click nothing
+    // keeps focus: returning it would draw a ring around the tile on touch screens.
+    if (S.keyboard) {
+      const focusable = focusTarget?.closest<HTMLElement>("button, a[href], [tabindex]") ?? focusTarget;
+      focusable?.focus({ preventScroll: true });
+    } else {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body && (rootRef.current?.contains(active) || focusTarget?.contains(active) || active.contains(focusTarget))) active.blur();
+    }
   };
 
   /* -------------------------------------------------------------- wiring */
@@ -1784,6 +2204,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
     gesturesRef.current = gestures;
     window.addEventListener("keydown", onKey);
+    // How the person is getting around, for where focus goes (see focusCard).
+    const onKeyInput = () => (S.keyboard = true);
+    const onPointerInput = () => (S.keyboard = false);
+    window.addEventListener("keydown", onKeyInput, true);
+    window.addEventListener("pointerdown", onPointerInput, true);
     // Scrolling during a transition:
     // - inside a card while its hero is still flying in: the flight follows (see startFlight);
     // - the page while cards are flying home: their sources moved, so re-aim them,
@@ -1796,14 +2221,51 @@ export function ZoomProvider(props: ZoomProviderProps) {
         it.flightScrollNow = scrollerOf(it.id)?.scrollTop ?? it.flightScrollNow;
         it.flight.invalidate();
       });
-      if (S.phase !== "closing" || S.mode !== "cards" || S.reduced) return;
       if (e.target instanceof Node && root.contains(e.target)) return;
-      if (reaim) return;
+      followPage();
+    };
+    /**
+     * Closing, the page moved. If the viewport changed size with it, the page moved under
+     * the overlay at once (a host re-laying it out, as the claude.ai viewer does when a
+     * page's scrolling is released; the overlay's own frame moves on screen with it):
+     * shift everything in flight by the same amount, in this frame, so nothing moves on
+     * screen and the targets still hold. Otherwise it was scrolled: re-aim at the sources.
+     */
+    const followPage = () => {
+      if (S.phase !== "closing" || S.mode !== "cards" || S.reduced) return;
+      const ref = S.pageRef;
+      if (!ref) return reaimSoon();
+      const r = ref.el.getBoundingClientRect();
+      const o = root.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const vw = vv?.width ?? innerWidth;
+      const vh = vv?.height ?? innerHeight;
+      const [left, top] = [r.left - o.left, r.top - o.top];
+      const dx = left - ref.left;
+      const dy = top - ref.top;
+      const resized = Math.abs(vw - ref.vw) > 0.5 || Math.abs(vh - ref.vh) > 0.5;
+      Object.assign(ref, { left, top, vw, vh });
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+      if (!resized) return reaimSoon();
+      S.shift = { x: S.shift.x + dx, y: S.shift.y + dy };
+      applyShift();
+    };
+    const reaimSoon = () => {
+      if (S.phase !== "closing" || S.mode !== "cards" || S.reduced || reaim) return;
       reaim = requestAnimationFrame(() => {
         reaim = 0;
         if (S.phase === "closing" && S.mode === "cards") transitionCards("sources", S.index);
       });
     };
+    // The viewport changing size mid-close (a host re-laying out the page, toolbars
+    // showing) moves the sources too.
+    // Over the whole page, the overlay follows the viewport's size (first, so the page's
+    // movement is then measured against where it now is).
+    const replace = () => S.phase !== "idle" && placeOnPage();
+    window.addEventListener("resize", replace);
+    window.visualViewport?.addEventListener("resize", replace);
+    window.addEventListener("resize", followPage);
+    window.visualViewport?.addEventListener("resize", followPage);
     document.addEventListener("scroll", onAnyScroll, { capture: true, passive: true });
     // Back and Forward.
     const onPop = (e: PopStateEvent) => {
@@ -1847,7 +2309,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
     return () => {
       gestures.detach();
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKeyInput, true);
+      window.removeEventListener("pointerdown", onPointerInput, true);
       window.removeEventListener("popstate", onPop);
+      window.removeEventListener("resize", replace);
+      window.visualViewport?.removeEventListener("resize", replace);
+      window.removeEventListener("resize", followPage);
+      window.visualViewport?.removeEventListener("resize", followPage);
       document.removeEventListener("scroll", onAnyScroll, { capture: true });
       cancelAnimationFrame(reaim);
       ro.disconnect();
@@ -1882,7 +2350,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const cleanups = [...document.querySelectorAll<HTMLElement>(selector)].map((el) => {
       const id = el.dataset.zoomSource;
       if (!id) return () => {};
-      const unregister = register({ id, group: el.dataset.zoomGroup ?? "default", el });
+      const unregister = register({ id, group: el.dataset.zoomGroup ?? "default", el, section: el.dataset.zoomSection });
       const trigger = el.closest<HTMLElement>("a, button") ?? el;
       const onClick = (e: MouseEvent) => {
         // Let modified clicks through so a link can still open in a new tab.
@@ -1902,7 +2370,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const api = useMemo(() => ({ open, close: () => close(), register, isOpen: !!session }), [open, close, register, session]);
 
   const closeLabel = props.closeLabel ?? "Close";
-  const closeFromUi = useCallback(() => close(), [close]);
+  /** From a card's own close button or context: that card goes home. */
+  const closeFromUi = useCallback((id?: string) => close(undefined, { id }), [close]);
   // Stable, so memoised cards keep their context until their own id/index/active changes.
   const cardContext = useCallback(
     (id: string, j: number, active: boolean): CardContextValue => ({
@@ -1917,7 +2386,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         if (content) heroContent.current.set(id, content);
         else heroContent.current.delete(id);
       },
-      close: closeFromUi,
+      close: () => closeFromUi(id),
     }),
     [closeFromUi],
   );
@@ -1936,12 +2405,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
     createPortal(
       <div
         ref={rootRef}
-        className={["zoom-root", fixed && "zoom-fixed", layout?.vertical && "zoom-vertical", layout?.stream && "zoom-streaming"]
+        className={["zoom-root", fixed && "zoom-page", layout?.vertical && "zoom-vertical", layout?.stream && "zoom-streaming"]
           .filter(Boolean)
           .join(" ")}
         role="dialog"
         aria-modal="true"
       >
+        <motion.div className="zoom-backdrop" style={{ opacity: backdropOpacity }} />
         <motion.div ref={dimRef} className="zoom-dim" style={{ opacity: dimOpacity }} />
         <motion.div ref={zoomerRef} className="zoom-zoomer" style={{ x: zx, y: zy, scale: zs, opacity: zoomOpacity }}>
           {session && layout && (
@@ -1951,13 +2421,24 @@ export function ZoomProvider(props: ZoomProviderProps) {
               className={layout.stream ? "zoom-stream" : "zoom-track"}
               style={
                 layout.stream
-                  ? { paddingTop: layout.top, paddingBottom: layout.top, rowGap: layout.gap }
+                  ? { paddingTop: layout.top, paddingBottom: `calc(${layout.top}px + var(--zoom-overscan, 0px))`, rowGap: layout.gap, ["--zoom-gap" as string]: `${layout.gap}px` }
                   : layout.vertical
                     ? { y: track }
                     : { x: track }
               }
             >
-              {session.ids.map((id, j) => (
+              {session.ids.map((id, j) => {
+                const sectionOf = (k: number) => (k >= 0 && k < session.ids.length ? sources.current.get(session.ids[k])?.section : undefined);
+                const section = layout.stream ? sectionOf(j) : undefined;
+                const startsSection = !!section && section !== sectionOf(j - 1);
+                const endsSection = !!section && section !== sectionOf(j + 1);
+                return (
+                <Fragment key={id}>
+                {startsSection && (
+                  <motion.div className="zoom-stream-title-row" style={{ width: layout.cardW, opacity: extrasOpacity }} data-zoom-section-title="">
+                    {props.renderSectionTitle ? props.renderSectionTitle(section!) : <h2 className="zoom-stream-title">{section}</h2>}
+                  </motion.div>
+                )}
                 <ZoomCard
                   key={id}
                   id={id}
@@ -1974,8 +2455,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
                   zones={zones}
                   makeContext={cardContext}
                   setCardEl={setCardEl}
+                  section={section}
+                  sectionStart={startsSection}
+                  sectionEnd={endsSection}
                 />
-              ))}
+                </Fragment>
+                );
+              })}
             </motion.div>
           )}
         </motion.div>

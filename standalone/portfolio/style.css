@@ -22,6 +22,9 @@
   color-scheme: dark;
 }
 
+/* Corner smoothing (Figma's iOS-style 60%) comes from src/zoom/corners.css: radii here are
+   Figma values times --zoom-smooth, drawn with --zoom-smooth-shape. */
+
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
 img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -40,26 +43,42 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 .work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
 @media (min-width: 700px) { .work { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px 24px; } }
-.tile-image { aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; }
+.tile-image { aspect-ratio: 4 / 3; overflow: hidden; } /* .zoom-concentric: the same corner as on the card */
 .tile h3 { margin: 12px 0 0; font: 700 21px/1.2 var(--display); letter-spacing: -0.01em; }
 .tile p { margin: 3px 0 0; font-size: 14px; color: var(--muted); }
 
 .notes li + li { border-top: 1px solid var(--line); }
 .row { display: flex; gap: 14px; padding: 14px 0; }
-.row-image { flex: none; width: 68px; aspect-ratio: 1; border-radius: 10px; overflow: hidden; }
+.row-image { flex: none; width: 68px; aspect-ratio: 1; border-radius: calc(10px * var(--zoom-smooth)); corner-shape: var(--zoom-smooth-shape); overflow: hidden; }
 .row h3 { margin: 2px 0 0; font: 700 18px/1.25 var(--display); }
 .row p { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
 .meta { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--muted); }
 
 /* ---------------------------------------------------------------- a piece, open */
 
-/* Theme the zoom (see src/zoom/zoom.css for every --zoom-* property). */
-:root { --zoom-card-bg: var(--card); --zoom-card-color: var(--text); --zoom-card-radius: 20px; --zoom-close-bg: color-mix(in srgb, var(--card) 70%, transparent); --zoom-close-color: var(--text); }
+/* Concentric corners, from two Figma values: the card's corner and the image's inset.
+   zoom.css derives the rest: the card's corner, the close button on the same centre, and
+   .zoom-concentric (radius − inset = 18 px) for the image and its tile. */
+:root {
+  --zoom-radius: 28px;
+  --zoom-inset: 10px;
+  /* Theme the zoom (see src/zoom/zoom.css for every --zoom-* property). */
+  --zoom-card-bg: var(--card);
+  --zoom-card-color: var(--text);
+  --zoom-close-size: 28px;
+  --zoom-close-bg: color-mix(in srgb, var(--card) 70%, transparent);
+  --zoom-close-color: var(--text);
+}
 
-/* The image sits on the card, inset, like a cover on a table. Same radius as its tile. */
-.piece-image { margin: 20px 20px 0; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
-.piece-image.wide { aspect-ratio: 16 / 9; border-radius: 10px; }
-.piece-text { max-width: 620px; margin: 0 auto; padding: 22px 22px 40px; }
+/* The image sits on the card, inset, like a cover on a table. Padding (not margin) on
+   the piece keeps the inset inside the card. */
+.piece { padding: var(--zoom-inset) var(--zoom-inset) 0; }
+.piece-image { aspect-ratio: 4 / 3; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.piece-image.wide { aspect-ratio: 16 / 9; }
+/* The image rounds itself rather than the hero clipping it: a shadow and overflow: hidden
+   on one element can render with a square-clipped shadow and square corners in iOS Safari. */
+.piece-image img { border-radius: inherit; corner-shape: inherit; }
+.piece-text { max-width: 620px; margin: 0 auto; padding: 22px 12px 40px; }
 .piece h2 { margin: 6px 0 0; font: 750 clamp(30px, 8cqw, 44px)/1.04 var(--display); letter-spacing: -0.025em; text-wrap: balance; }
 .piece h3 { margin: 30px 0 0; font: 700 21px/1.25 var(--display); }
 .piece p { margin: 12px 0 0; font: 18px/1.6 var(--read); text-wrap: pretty; }
@@ -69,4 +88,3 @@ ul { margin: 0; padding: 0; list-style: none; }
 .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 22px 0 0; padding: 16px 0; border-block: 1px solid var(--line); }
 .facts dt { font-size: 12px; color: var(--muted); }
 .facts dd { margin: 3px 0 0; font-size: 15px; }
-@media (max-width: 600px) { .piece-image { margin: 14px 14px 0; } }

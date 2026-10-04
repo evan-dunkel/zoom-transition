@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-delineation="line">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Portfolio Sections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../src/zoom/zoom.css">
+<link rel="stylesheet" href="../../src/zoom/corners.css">
+<link rel="stylesheet" href="../portfolio-icons/style.css">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="variants.css">
+</head>
+<body>
+<!--
+  The icon prototype's content and settings, with each section opening as one
+  continuous card: the works in a section join into a single surface, divided by a
+  delineation you can switch (variants.css, and the list in island.tsx).
+-->
+<!-- include ../portfolio-icons/content.html -->
+
+<!-- Prototype control, outside <main> so it stays usable while a card is open. -->
+<nav class="variants" aria-label="Between works"></nav>
+
+<div id="zoom"></div>
+<script src="island.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # Portfolio zoom, standalone
 
 The portfolio prototype at its simplest: plain markup, one stylesheet, one script.
-`npm run build:portfolio` inlines it all into `dist/portfolio.html`.
+`npm run build:portfolio` inlines it all into `dist/portfolio.html` (via `standalone/build.py`).
 
 ## The three parts
 
@@ -9,9 +9,9 @@ The portfolio prototype at its simplest: plain markup, one stylesheet, one scrip
 | --- | --- | --- |
 | `index.html` | The index (tiles and rows) and one `<template>` per piece | Your page and content collection, rendered as today |
 | `island.tsx` | The only script: mounts the zoom and reads both from the page | One React island, `<ZoomRoot client:idle />` |
-| `style.css` | Page layout, and how a piece looks open | Your existing styles, plus the `.piece-image` inset |
+| `style.css` | Page layout, and how a piece looks open | Your existing styles, plus `--zoom-radius` and `--zoom-inset` |
 
-Plus `src/zoom/` (the library) and `src/zoom/zoom.css`.
+Plus `src/zoom/` (the library), `src/zoom/zoom.css` and, for smoothed corners, `src/zoom/corners.css`.
 
 ## Markup contract
 
@@ -34,7 +34,8 @@ Plus `src/zoom/` (the library) and `src/zoom/zoom.css`.
 - `data-zoom-group`: every piece in a group opens into the same continuous column, in
   page order. Projects and writing are two groups, so two separate streams.
 - `data-zoom-hero`: the image that flies from the tile. It sits inset on the card;
-  give it the same corner radius as the tile so the hand-over is invisible.
+  give it and the tile `class="zoom-concentric"` so they share a corner and the hand-over
+  is invisible.
 
 ## The settings that make this layout and animation
 
@@ -50,7 +51,14 @@ Plus `src/zoom/` (the library) and `src/zoom/zoom.css`.
 />
 ```
 
+Corners come from the library: `style.css` sets two Figma values, `--zoom-radius: 28px` (the
+card) and `--zoom-inset: 10px` (the image's inset, as padding so it stays inside the card).
+`zoom.css` derives the rest: the card's corner, the close button on the same centre, and
+`.zoom-concentric` (18 px) on the image and its tile. `corners.css` smooths them like Figma's
+iOS corners (60%) where the browser draws `corner-shape`, falling back to the plain radius.
+
 Everything else is a default: the spring timing (open 0.5 s, close 1.75× faster),
-closing with ✕, Escape, or a sideways drag or scroll, and reduced motion becoming a fade.
+closing with ✕, Escape, or a sideways drag (a sideways trackpad scroll too, with
+`dismiss={{ wheelSideways: true }}`), and reduced motion becoming a fade.
 On a real site, give `history` your real URLs (`url: (id) => "/work/" + id`), so a
 reload or a shared link lands on that piece's own page.
