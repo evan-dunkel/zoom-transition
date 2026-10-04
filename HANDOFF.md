@@ -457,6 +457,18 @@ See README for details.
 6. Option to auto-open from URL hash (`#id`) on load, if wanted.
 
 ## 9. Testing notes
+- iOS Safari, reported from a phone: a landed hero with both `box-shadow` and
+  `overflow: hidden` showed its shadow clipped to a square box and square corners (the
+  flying copy, which keeps shadow and clip on separate layers, looked right). Heroes with
+  a shadow now leave overflow visible and their image rounds itself (`border-radius:
+  inherit`); the flight writes the corner to a frozen copy's first child too when that
+  child carries one (`innerRound` in flight.ts). Not reproducible here (no WebKit in this
+  environment): the fix follows the copy's structure. Guarded on every prototype by
+  "heroes with a shadow don't clip their own overflow" (standalone-portfolio.spec.ts),
+  and the inner-corner tween by harness project C in flight-invariants.spec.ts.
+- The same report's "first open is cut off": measured identical in Chromium on first open
+  and reopen (title 8px from the overlay's top). The claude.ai artifact viewer's
+  translucent header covered the top of the page on the first open; not our layout.
 - `flight-invariants.spec.ts` guards what every layout inherits, on the plain harness
   (`test/scan.html`: a square 12px tile opening into a 16:9, 32px hero with a shadow): even
   crop, corner tween without a landing jump, shadow fading with the flight, focus by input

@@ -286,6 +286,11 @@ What the page still decides, and how to keep it right:
   (radius − inset) follow. Put `zoom-concentric` on the hero and on the tile it flies from,
   so both ends share a corner; a more specific rule of your own setting `border-radius`
   wins over it, so leave radius off those elements.
+- **A hero with a shadow: don't clip it.** Put `box-shadow` and `border-radius` on the hero,
+  leave its overflow visible, and let its image round itself (`border-radius: inherit`).
+  With a shadow and `overflow: hidden` on one element, iOS Safari can draw the landed hero
+  with its shadow clipped to a square box and square corners. The flight tweens the image's
+  corner too, so the hand-over stays smooth.
 - **Inset with padding, not margin**, on the destination's wrapper (`padding: var(--zoom-inset)`).
   The card contains margins too (`flow-root`), but padding keeps the inset part of the card.
 - **Reading over the page.** Titles or anything else drawn between stream cards sit on the

@@ -285,7 +285,7 @@ button { font: inherit; color: inherit; }
 /* The image sits on the card, inset over a band tinted with its own ground, like a
    book's cover; the card grows out from behind it as it opens. */
 .pf-stage { padding: 10px 10px 0; background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 26%, var(--card)) 0%, var(--card) 88%); }
-.pf-hero { position: relative; display: block; overflow: hidden; border-radius: calc(18px * var(--zoom-smooth)); corner-shape: var(--zoom-smooth-shape); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.pf-hero { position: relative; display: block; border-radius: calc(18px * var(--zoom-smooth)); corner-shape: var(--zoom-smooth-shape); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
 
 .pf-hero-work { aspect-ratio: 4 / 3; }
 .pf-hero-note { aspect-ratio: 16 / 9; }
@@ -312,7 +312,7 @@ button { font: inherit; color: inherit; }
 .pf-back { margin-top: 12px; height: 40px; padding: 0 18px; border: 0; border-radius: 20px; background: var(--fill); font-size: 15px; font-weight: 600; cursor: pointer; }
 
 /* Generated images (sample imagery). Everything scales with the box it's in. */
-.art { position: absolute; inset: 0; display: block; overflow: hidden; container-type: inline-size; background: var(--a-bg); color: var(--a-fg); }
+.art { position: absolute; inset: 0; display: block; overflow: hidden; border-radius: inherit; corner-shape: inherit; container-type: inline-size; background: var(--a-bg); color: var(--a-fg); }
 .art > *, .art .panel > *, .art .tiles > * { position: absolute; display: block; }
 .art-phones .ph { width: 30%; aspect-ratio: 9 / 19.5; border-radius: 4.5cqw; box-shadow: 0 2cqw 6cqw rgba(0, 0, 0, 0.28);
   background:

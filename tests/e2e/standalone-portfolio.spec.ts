@@ -282,3 +282,30 @@ test("writing's image uncrops evenly through the flight, not in a rush at the en
   }
   expect(worst).toBeLessThan(0.03); // before the fix: 0.10, the width catching up at the end
 });
+
+// iOS Safari can draw a hero that has both a shadow and overflow: hidden with its shadow
+// clipped to a square box and its corners square once it lands. Heroes with a shadow
+// leave their overflow visible; their image rounds itself (border-radius: inherit).
+for (const url of ["/dist/portfolio.html", "/dist/portfolio-icons.html", "/dist/portfolio-sections.html"]) {
+  test(`heroes with a shadow don't clip their own overflow: ${url}`, async ({ page }) => {
+    await page.goto(url);
+    const heroes = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLTemplateElement>("template[data-zoom-destination]")].map((t) => {
+        const host = document.createElement("div");
+        host.className = "zoom-card-content";
+        host.append(t.content.cloneNode(true));
+        document.body.append(host);
+        const hero = host.querySelector<HTMLElement>("[data-zoom-hero]")!;
+        const cs = getComputedStyle(hero);
+        const image = hero.firstElementChild ? getComputedStyle(hero.firstElementChild).borderTopLeftRadius : "";
+        const result = { id: t.dataset.zoomDestination, shadow: cs.boxShadow !== "none", overflow: cs.overflow, radius: cs.borderTopLeftRadius, image };
+        host.remove();
+        return result;
+      }),
+    );
+    for (const h of heroes.filter((x) => x.shadow)) {
+      expect(h.overflow, h.id).toBe("visible");
+      expect(h.image, h.id).toBe(h.radius); // the image carries the hero's corner
+    }
+  });
+}

@@ -19,8 +19,18 @@ async function recordOpen(page: Page, source = "a") {
         frames.push({
           w: r.width,
           h: r.height,
-          // On screen. The window carries the corner while it crops; the copy inside it after.
-          radius: (parseFloat(getComputedStyle(win).borderTopLeftRadius) || parseFloat(getComputedStyle(win.firstElementChild!).borderTopLeftRadius)) * scale,
+          // On screen. The window carries the corner while it crops; the copy inside it
+          // after; and where the hero's image rounds itself, the image.
+          radius: (() => {
+            // The corner that's drawn: the window's while it crops; else the copy's if it
+            // clips its content; else (the hero's image rounds itself) the image's.
+            const copy = win.firstElementChild as HTMLElement;
+            const drawn =
+              getComputedStyle(win).overflow === "hidden" ? win
+              : getComputedStyle(copy).overflow === "hidden" ? copy
+              : ((copy.firstElementChild as HTMLElement) ?? copy);
+            return parseFloat(getComputedStyle(drawn).borderTopLeftRadius) * scale;
+          })(),
           shadow: shade ? Number(getComputedStyle(shade).opacity) : NaN,
         });
       }
@@ -54,6 +64,13 @@ test("the corner tweens from the tile's radius to the hero's, without a jump at 
   expect(radii[0]).toBeCloseTo(12, 0);
   expect(radii[radii.length - 1]).toBeGreaterThan(30); // arrives at the hero's 32px…
   expect(biggestStep(radii)).toBeLessThan(0.4 * 20); // …a little each frame
+});
+
+test("where the hero's image rounds itself (shadow left unclipped), its corner tweens too", async ({ page }) => {
+  const radii = (await recordOpen(page, "c")).map((f) => f.radius);
+  expect(radii[0]).toBeCloseTo(40, 0); // takes off with the tile's 40px…
+  expect(radii[radii.length - 1]).toBeCloseTo(32, 0); // …lands with the hero's 32px
+  expect(biggestStep(radii)).toBeLessThan(0.4 * 8);
 });
 
 test("the shadow fades in with the flight instead of popping on at the end", async ({ page }) => {

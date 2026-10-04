@@ -73,8 +73,11 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* The image sits on the card, inset, like a cover on a table. Padding (not margin) on
    the piece keeps the inset inside the card. */
 .piece { padding: var(--zoom-inset) var(--zoom-inset) 0; }
-.piece-image { aspect-ratio: 4 / 3; overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.piece-image { aspect-ratio: 4 / 3; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
 .piece-image.wide { aspect-ratio: 16 / 9; }
+/* The image rounds itself rather than the hero clipping it: a shadow and overflow: hidden
+   on one element can render with a square-clipped shadow and square corners in iOS Safari. */
+.piece-image img { border-radius: inherit; corner-shape: inherit; }
 .piece-text { max-width: 620px; margin: 0 auto; padding: 22px 12px 40px; }
 .piece h2 { margin: 6px 0 0; font: 750 clamp(30px, 8cqw, 44px)/1.04 var(--display); letter-spacing: -0.025em; text-wrap: balance; }
 .piece h3 { margin: 30px 0 0; font: 700 21px/1.25 var(--display); }

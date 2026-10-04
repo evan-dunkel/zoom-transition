@@ -189,6 +189,11 @@ export function createFlight(
   }
   el.appendChild(win);
   win.appendChild(copy);
+  // A hero whose image carries the corner itself (border-radius: inherit, so the hero
+  // can keep its shadow unclipped): the frozen copy has that corner as a fixed value,
+  // so it's written alongside the copy's own each frame.
+  const inner = copy.firstElementChild as HTMLElement | null;
+  const innerRound = !!inner && pxRadius(inner.style.borderTopLeftRadius) > 0;
   // Live heroes get a host for their own React content. Until that content has
   // rendered (usually the same frame), the snapshot underneath stands in.
   let liveHost: HTMLElement | null = null;
@@ -229,6 +234,7 @@ export function createFlight(
     if (corners) {
       const value = `${r}px`;
       copy.style.borderRadius = value;
+      if (innerRound) inner!.style.borderRadius = value;
       if (liveHost) liveHost.style.borderRadius = value;
     }
     // Crop: shrink the window to the visible part (see above).
