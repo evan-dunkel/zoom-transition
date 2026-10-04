@@ -68,6 +68,9 @@
 .zoom-stream::-webkit-scrollbar { display: none; }
 .zoom-stream .zoom-card { position: relative; flex: none; overflow: clip; }
 .zoom-stream .zoom-card-scroll { height: auto; overflow: visible; }
+/* Section titles between a stream's cards (renderSectionTitle; style .zoom-stream-title). */
+.zoom-stream-title-row { flex: none; }
+.zoom-stream-title { margin: 0; }
 /* Hold still while a card is pulled sideways, and while cards fly home. */
 .zoom-dragging .zoom-stream,
 .zoom-root[data-phase="closing"] .zoom-stream { overflow-y: hidden; }

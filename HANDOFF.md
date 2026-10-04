@@ -39,7 +39,10 @@ demo/                main.tsx (layout switch), BookStore.tsx (shelves), BookFeed
                      feed), BookParts.tsx (covers, 3D book), books.ts, Portfolio.tsx +
                      portfolioContent.ts (portfolio prototype), demo.css
 standalone/portfolio/ the portfolio at its simplest (plain HTML + templates + one island), built
-                     to dist/portfolio.html by its build.py; the reference for mapping onto a site
+                     to dist/portfolio.html; the reference for mapping onto a site
+standalone/portfolio-icons/ a second portfolio prototype: one stream for every section (section
+                     titles between cards), icon-led cards, About + CTA last; dist/portfolio-icons.html
+standalone/build.py  builds either folder into one self-contained HTML file (+ an -artifact variant)
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
 tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)
@@ -118,7 +121,11 @@ behind is live and a tap can reopen).
   the shadow layer takes the same inset, so it wraps the visible shape. Uncropped, the
   window clips nothing (3D overhangs survive). The only clip-path left on the clone is the
   scroll-follow band. (The crop used to be a clip-path on the clone: it cut the shadow and
-  squared the cropped corners, visible on writing thumbnails.)
+  squared the cropped corners, visible on writing thumbnails.) The visible rect's width and
+  height are each interpolated by the scale's progress (`crop(sv)`: `vw`, `vh` from `A` to
+  `B`, then divided by the scale). Deriving the crop from the cover fit at the current
+  scale instead left one side pinned until late, so a square thumbnail widened in a rush
+  over the last ~20% of the flight.
 - Shadow: the hero element's own `box-shadow` (read in `measureHero`) is moved off the
   copy onto a `.zoom-clone-shadow` layer behind it, whose opacity follows the item's
   `progress` (`shadowOpacity`). Sources rarely have the hero's shadow, so carried at
@@ -288,7 +295,9 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   Previously a swipe made while the last one's momentum (or the browser's bounce) was
   still running at the edge never counted, so the page was hard to turn. Dismiss arming
   (horizontal pager) is unchanged. Sideways swipes pull the card (same `pull` spring and
-  `pullBy`/`commitWheelDismiss`, mapped to x). Edge settings collapse to on/off
+  `pullBy`/`commitWheelDismiss`, mapped to x) only with `dismiss.wheelSideways` (default
+  false: trackpad sideways swipes weren't dependable enough on desktop); otherwise a
+  sideways wheel event is swallowed and does nothing. Edge settings collapse to on/off
   (`sidewaysOn`). Debug edge zones aren't drawn.
 - `swipeTail()` follows a swipe that has already acted (turned a page, closed the
   card) so its leftover momentum is ignored but a **new swipe acts at once**, even
@@ -430,8 +439,14 @@ See README for details.
   new swipes during momentum, quick flicks reading on, swipe distance, `atEdge` modes,
   no bounce. `portfolio.spec.ts` (stream): content-height cards in one column, scrolling
   straight through pieces with nothing cancelled, the sticky close button, only the
-  piece being read flying home, the card growing from behind the image, touch/wheel
-  close, writing as its own stream, Back.
+  piece being read flying home, the card growing from behind the image, touch close
+  (sideways wheel off by default), writing as its own stream, Back.
+  `standalone-portfolio.spec.ts` also checks the flight's crop grows evenly (visible width
+  and height reach the same share of the way on every frame). `standalone-portfolio-icons.spec.ts`:
+  one stream across sections with titles in the page's style, the opening title in view,
+  icon geometry, the About CTA's copy button, closing across sections.
+  `trackpad-paging.spec.ts` is timing-sensitive under load (fails occasionally with
+  `--repeat-each`, before and after these changes).
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
 - Development used ad-hoc Python Playwright scripts (`tests/playwright/`) against
   the built demo (`ZOOM_DEMO_URL`, default `http://localhost:8765/dist/`; see its README).

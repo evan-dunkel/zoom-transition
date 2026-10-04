@@ -3,7 +3,8 @@ import { clamp } from "./springs";
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
-type Fit = { s: number; cx: number; cy: number; ix: number; iy: number };
+/** Where the copy is (centre, scale) and the on-screen size of the part that shows. */
+type Fit = { s: number; cx: number; cy: number; vw: number; vh: number };
 
 export type Flight = {
   cx: MotionValue<number>;
@@ -135,8 +136,8 @@ export function createFlight(
       s,
       cx: r.x + r.w / 2,
       cy: r.y + r.h / 2,
-      ix: Math.max(0, (W0 - r.w / s) / 2),
-      iy: Math.max(0, (H0 - r.h / s) / 2),
+      vw: r.w,
+      vh: r.h,
     };
   };
   let A = fit(from);
@@ -203,9 +204,17 @@ export function createFlight(
   const cy = motionValue(A.cy);
   const s = motionValue(A.s);
 
+  // The visible part's on-screen width and height each move evenly from one end's to the
+  // other's, as the scale does. (Interpolating the crop insets in the copy's own units
+  // instead left most of the widening for the end of the flight, since those insets are
+  // multiplied by a scale that's growing: a late, lopsided stretch.)
   const crop = (sv: number) => {
     const t = A.s === B.s ? 1 : clamp((sv - A.s) / (B.s - A.s), 0, 1);
-    return { ix: A.ix + (B.ix - A.ix) * t, iy: A.iy + (B.iy - A.iy) * t };
+    const vw = A.vw + (B.vw - A.vw) * t;
+    const vh = A.vh + (B.vh - A.vh) * t;
+    return sv > 0
+      ? { ix: Math.max(0, (W0 - vw / sv) / 2), iy: Math.max(0, (H0 - vh / sv) / 2), vw, vh }
+      : { ix: 0, iy: 0, vw, vh };
   };
   const write = () => {
     scheduled = false;
@@ -274,7 +283,8 @@ export function createFlight(
       const sv = s.get();
       rA = screenRadius(sv); // carry on from the corner it has now
       if (radius !== undefined) rB = radius;
-      A = { s: sv, cx: cx.get(), cy: cy.get(), ...crop(sv) };
+      const now = crop(sv);
+      A = { s: sv, cx: cx.get(), cy: cy.get(), vw: now.vw, vh: now.vh };
       B = fit(next);
       flight.to = B;
     },

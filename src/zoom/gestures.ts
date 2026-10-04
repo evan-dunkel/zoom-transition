@@ -28,6 +28,7 @@ export type GestureDismiss = {
   dimFade: number;
   drag: DismissEdges;
   wheel: DismissEdges;
+  wheelSideways: boolean;
   wheelDistance: number;
   wheelEdgeSlop: number;
 };
@@ -637,12 +638,14 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     pullBy(dy);
   };
 
-  // Vertical pager: scrolling sideways pulls the card to close, either way. There's
-  // nothing to scroll sideways, so there's no edge to wait for: the pull starts at once.
+  // Vertical pager: with dismiss.wheelSideways, scrolling sideways pulls the card to
+  // close, either way. There's nothing to scroll sideways, so there's no edge to wait
+  // for: the pull starts at once. Off (the default), a sideways scroll does nothing.
   const onSidewaysWheel = (e: WheelEvent) => {
     // Always ours, so a sideways swipe never reaches the browser's swipe-back navigation.
     e.preventDefault();
-    if (!sidewaysOn(c.dismiss().wheel)) return;
+    const d = c.dismiss();
+    if (!d.wheelSideways || !sidewaysOn(d.wheel)) return;
     const dx = wheelDelta(e, "x");
     if (!dx) return;
     if (!W.pulling) beginPull(dx < 0 ? 1 : -1);

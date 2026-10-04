@@ -147,7 +147,7 @@ test("a vertical drag scrolls; a sideways drag closes", async ({ page }) => {
   await expect.poll(() => phase(page), { timeout: 3000 }).toBe("idle");
 });
 
-test("scrolling sideways closes", async ({ page }) => {
+test("scrolling sideways doesn't close: on desktop that's off by default", async ({ page }) => {
   await openPortfolio(page);
   await openProject(page, 0);
   await page.mouse.move(215, 450);
@@ -155,7 +155,8 @@ test("scrolling sideways closes", async ({ page }) => {
     await page.mouse.wheel(40, 0);
     await page.waitForTimeout(30);
   }
-  await expect.poll(() => phase(page), { timeout: 3000 }).toBe("idle");
+  await page.waitForTimeout(600);
+  expect(await phase(page)).toBe("open");
 });
 
 test("writing is its own stream, and the last piece offers the way back", async ({ page }) => {

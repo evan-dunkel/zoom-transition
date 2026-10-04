@@ -97,6 +97,7 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
   const storeRef = useRef<HTMLElement>(null);
   const [slow, setSlow] = useState(false);
   const [heroMode, setHeroMode] = useState<HeroMode>("synced");
+  const [wheelSideways, setWheelSideways] = useState(false);
   const paging = usePagingTuning("feed-paging-v1");
   const compact = () => window.matchMedia("(max-width: 540px)").matches;
 
@@ -109,6 +110,7 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
           flyHome="visible"
           timing={paging.timing}
           paging={paging.paging}
+          dismiss={{ wheelSideways }}
           groupOpacity={0.35}
           container={() => phoneRef.current}
           background={() => storeRef.current}
@@ -132,7 +134,7 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
               </button>
             </header>
             {switcher}
-            <p className="hint">Tap a cover. Swipe up and down to browse every book, sideways to close.</p>
+            <p className="hint">Tap a cover. Swipe up and down to browse every book, drag sideways to close.</p>
             <div className="tune">
               <label>
                 Book in flight
@@ -141,6 +143,9 @@ export function BookFeed({ switcher }: { switcher?: ReactNode }) {
                   <option value="own">Own timing</option>
                   <option value="static">Static</option>
                 </select>
+              </label>
+              <label>
+                <input id="wheel-sideways" type="checkbox" checked={wheelSideways} onChange={(e) => setWheelSideways(e.target.checked)} /> Sideways scroll closes (trackpad)
               </label>
             </div>
             <PagingControls tuning={paging} />

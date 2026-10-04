@@ -147,8 +147,15 @@ test("a sideways mouse drag closes", async ({ page }) => {
   await expectCloses(page);
 });
 
-test("scrolling sideways closes", async ({ page }) => {
+test("scrolling sideways closes only when turned on (dismiss.wheelSideways)", async ({ page }) => {
   await openFeed(page);
+  await swipe(page, 40, 0, 10); // off by default: nothing happens
+  await expectStaysOpen(page);
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page)).toBe("idle");
+  await page.locator("#wheel-sideways").check();
+  await page.locator(".tile").nth(4).click();
+  await expect.poll(() => phase(page)).toBe("open");
   await swipe(page, 40, 0, 10);
   await expectCloses(page);
 });

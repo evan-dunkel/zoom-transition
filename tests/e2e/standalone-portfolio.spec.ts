@@ -230,7 +230,7 @@ test("after a tap or click nothing is left focused; keyboard users keep their pl
   expect(await focused()).toBe("tile");
 });
 
-test("a sideways scroll pulls the card without the column scrolling under it", async ({ page }) => {
+test("a sideways scroll neither scrolls the column nor pulls the card", async ({ page }) => {
   await page.goto("/dist/portfolio.html");
   await page.locator(".tile").nth(1).click();
   await expect.poll(() => phase(page)).toBe("open");
@@ -243,5 +243,42 @@ test("a sideways scroll pulls the card without the column scrolling under it", a
     await page.waitForTimeout(16);
   }
   expect(await page.locator(".zoom-stream").evaluate((el) => el.scrollTop)).toBe(top);
-  expect(await page.locator(".zoom-zoomer").evaluate((el) => getComputedStyle(el).transform)).not.toBe("none"); // the card is being pulled
+  // Sideways wheel dismissal is off by default (dismiss.wheelSideways): nothing moves.
+  expect(await page.locator(".zoom-zoomer").evaluate((el) => getComputedStyle(el).transform)).toBe("none");
+  await page.waitForTimeout(400);
+  expect(await phase(page)).toBe("open");
+});
+
+test("writing's image uncrops evenly through the flight, not in a rush at the end", async ({ page }) => {
+  await page.goto("/dist/portfolio.html");
+  // Every frame: the flying image's visible (cropped) size on screen.
+  await page.evaluate(() => {
+    const seen: { w: number; h: number }[] = [];
+    (window as any).__crop = seen;
+    const tick = () => {
+      const win = document.querySelector<HTMLElement>(".zoom-clone-window");
+      if (win) {
+        const r = win.getBoundingClientRect();
+        seen.push({ w: r.width, h: r.height });
+      }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  await page.locator(".row").first().click(); // a square thumbnail opening into a wide image
+  await expect.poll(() => phase(page)).toBe("open");
+  const frames: { w: number; h: number }[] = await page.evaluate(() => (window as any).__crop);
+  expect(frames.length).toBeGreaterThan(8);
+  const a = frames[0];
+  const b = frames[frames.length - 1];
+  // The square becomes wide: the width grows several times more than the height. Each
+  // grows the same share of the way at once, so the shape eases from square to wide
+  // with the motion instead of widening late.
+  let worst = 0;
+  for (const f of frames) {
+    const tw = (f.w - a.w) / (b.w - a.w);
+    const th = (f.h - a.h) / (b.h - a.h);
+    worst = Math.max(worst, Math.abs(tw - th));
+  }
+  expect(worst).toBeLessThan(0.03); // before the fix: 0.10, the width catching up at the end
 });

@@ -1,7 +1,7 @@
 # Portfolio zoom, standalone
 
 The portfolio prototype at its simplest: plain markup, one stylesheet, one script.
-`npm run build:portfolio` inlines it all into `dist/portfolio.html`.
+`npm run build:portfolio` inlines it all into `dist/portfolio.html` (via `standalone/build.py`).
 
 ## The three parts
 
@@ -61,6 +61,7 @@ the tiles'), and the close button (28 px across, on the same centre via
 `--zoom-close-size` and `--zoom-close-inset`).
 
 Everything else is a default: the spring timing (open 0.5 s, close 1.75× faster),
-closing with ✕, Escape, or a sideways drag or scroll, and reduced motion becoming a fade.
+closing with ✕, Escape, or a sideways drag (a sideways trackpad scroll too, with
+`dismiss={{ wheelSideways: true }}`), and reduced motion becoming a fade.
 On a real site, give `history` your real URLs (`url: (id) => "/work/" + id`), so a
 reload or a shared link lands on that piece's own page.

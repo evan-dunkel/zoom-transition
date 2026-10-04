@@ -1,0 +1,122 @@
+/* The icon prototype: one list on the page, one stream of cards when open. Shared parts
+   (tokens, smoothing) match standalone/portfolio/style.css. */
+:root {
+  --bg: #f6f6f3;
+  --card: #ffffff;
+  --text: #1b1c1e;
+  --muted: #676a70;
+  --line: rgba(27, 28, 30, 0.12);
+  --accent: #2457d6;
+  --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --read: "Newsreader", ui-serif, Georgia, serif;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111214; --card: #1c1d20; --text: #f2f2f0; --muted: #9b9ea4; --line: rgba(255, 255, 255, 0.12); --accent: #8aaeff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111214; --card: #1c1d20; --text: #f2f2f0; --muted: #9b9ea4; --line: rgba(255, 255, 255, 0.12); --accent: #8aaeff;
+  color-scheme: dark;
+}
+
+/* Corner smoothing, matched to Figma's iOS-style corners (corner smoothing 60%).
+   Radii are written as their Figma values and multiplied by --smooth. Where the browser
+   draws corner-shape, a superellipse fitted to Figma's curve (within 0.7% of the radius)
+   needs a 1.23× box; elsewhere the plain radius is the closest circle (Figma's curve
+   keeps the circle's middle arc; it only eases into the edges over 1.6× the radius). */
+:root { --smooth: 1; --smooth-shape: round; }
+@supports (corner-shape: superellipse(2)) {
+  :root { --smooth: 1.23; --smooth-shape: superellipse(1.36); }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+img { display: block; width: 100%; height: 100%; object-fit: cover; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ---------------------------------------------------------------- index */
+
+main { max-width: 720px; margin: 0 auto; padding: 40px 20px 64px; }
+.intro h1 { margin: 0; font: 750 40px/1.05 var(--display); letter-spacing: -0.025em; }
+.intro p { margin: 12px 0 0; max-width: 34ch; font: 21px/1.35 var(--read); }
+.intro .note { max-width: 46ch; font: 14px/1.45 var(--ui); color: var(--muted); }
+section { margin-top: 48px; }
+ul { margin: 0; padding: 0; list-style: none; }
+
+/* One section-title style, on the page and between the cards of the open stream. */
+.section-title { margin: 0 0 6px; font: 750 30px/1.1 var(--display); letter-spacing: -0.02em; text-wrap: balance; }
+
+.list li + li { border-top: 1px solid var(--line); }
+.item { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
+.item-icon { flex: none; width: var(--icon); aspect-ratio: 1; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; }
+.item-text { min-width: 0; }
+.item h3 { margin: 0; font: 700 19px/1.25 var(--display); }
+.item p { margin: 3px 0 0; font-size: 14px; line-height: 1.4; color: var(--muted); }
+.sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .sub { margin-top: 1px; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
+
+/* ---------------------------------------------------------------- a piece, open */
+
+/* Concentric corners (Figma values; smoothing scales them as above). The card's corner
+   is 28 px; the icon sits 10 px in from the top and left, so its corner is 28 − 10 = 18 px
+   (the list's icons use the same, so the hand-over is invisible); the close button
+   (28 px across) sits on the top-right corner's centre, 14 px in. */
+:root {
+  --card-radius: 28px;
+  --card-inset: 10px;
+  --image-radius: calc(var(--card-radius) - var(--card-inset));
+  --icon: 88px;
+  /* Theme the zoom (see src/zoom/zoom.css for every --zoom-* property). */
+  --zoom-card-bg: var(--card);
+  --zoom-card-color: var(--text);
+  --zoom-card-radius: calc(var(--card-radius) * var(--smooth));
+  --zoom-corner-shape: var(--smooth-shape);
+  --zoom-close-size: 28px;
+  --zoom-close-inset: calc(var(--card-radius) - 14px);
+  --zoom-close-bg: color-mix(in srgb, var(--card) 70%, transparent);
+  --zoom-close-color: var(--text);
+}
+@media (min-width: 600px) { :root { --icon: 104px; } }
+
+/* The stream's section titles: exactly the page's .section-title, set between cards. The
+   page behind is blurred as it dims (the blur fades in and out with the dim), so the
+   titles read cleanly over it. */
+.zoom-stream-title-row { padding: 22px 12px 10px; }
+.zoom-stream-title-row:first-child { padding-top: 0; }
+.zoom-stream-title-row .section-title { margin: 0; }
+:root { --zoom-dim-color: rgba(0, 0, 0, 0.3); } /* the dim runs to full (dim={1} in island.tsx); this is its strength */
+.zoom-dim { -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+
+/* The header: icon left (inset like a cover on a table, padding not margin so the inset
+   stays inside the card), title and one line of metadata beside it, clear of the ✕. */
+.piece { padding: var(--card-inset) var(--card-inset) 0; }
+.piece-head { display: flex; align-items: center; gap: 16px; padding-right: 36px; }
+.piece-icon { flex: none; width: var(--icon); aspect-ratio: 1; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 12px 24px -12px rgba(0, 0, 0, 0.45); }
+.piece-title { min-width: 0; }
+.piece h2 { margin: 0; font: 750 clamp(24px, 6cqw, 32px)/1.08 var(--display); letter-spacing: -0.02em; text-wrap: balance; }
+.piece .sub { margin: 5px 0 0; font: 600 13px/1.4 var(--ui); letter-spacing: 0.01em; color: var(--muted); }
+.piece-text { max-width: 620px; margin: 0 auto; padding: 18px 12px 40px; }
+.piece h3 { margin: 30px 0 0; font: 700 21px/1.25 var(--display); }
+.piece p { margin: 12px 0 0; font: 18px/1.6 var(--read); text-wrap: pretty; }
+.piece .lede { margin-top: 4px; font-size: 21px; line-height: 1.4; }
+.piece blockquote { margin: 26px 0; padding-left: 18px; border-left: 3px solid var(--accent); font: italic 23px/1.35 var(--read); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 22px 0 0; padding: 16px 0; border-block: 1px solid var(--line); }
+.facts dt { font-size: 12px; color: var(--muted); }
+.facts dd { margin: 3px 0 0; font-size: 15px; }
+
+/* About: proof in three lines, then one easy way to reply. */
+.proof { margin: 18px 0 0; display: grid; gap: 12px; }
+.proof li { padding-left: 16px; border-left: 2px solid var(--line); font: 17px/1.5 var(--read); }
+.proof strong { font: 700 15px/1.4 var(--ui); display: block; }
+.cta { margin: 32px 0 0; padding: 20px; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); background: color-mix(in srgb, var(--accent) 9%, var(--card)); }
+.cta h3 { margin: 0; }
+.cta p { margin-top: 6px; }
+.piece .cta-email { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 14px; font: 600 17px/1.3 var(--ui); }
+[data-email] { user-select: all; }
+.cta-button { font: 650 15px/1 var(--ui); color: var(--bg); background: var(--accent); border: 0; padding: 12px 18px; border-radius: 999px; cursor: pointer; }
+.cta-button:active { transform: scale(0.97); }

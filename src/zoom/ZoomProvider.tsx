@@ -1,4 +1,5 @@
 import {
+  Fragment,
   createContext,
   memo,
   useCallback,
@@ -70,6 +71,13 @@ export type ZoomDismiss = {
    * Default: top only. Add the bottom with { bottom: true }.
    */
   wheel: ZoomEdges;
+  /**
+   * Vertical layouts (feed, stream): also close by scrolling sideways with a trackpad
+   * or a tilting wheel. Off by default: trackpad swipes mix sideways and vertical
+   * motion, and momentum, too unevenly for it to feel dependable. A sideways touch or
+   * mouse drag closes either way.
+   */
+  wheelSideways: boolean;
   /** How far (in px of scrolling) past the edge closes the card. */
   wheelDistance: number;
   /** A swipe that starts with the content within this many px of an edge can close the card. */
@@ -115,6 +123,7 @@ const defaultDismiss: ZoomDismiss = {
   dimFade: 0.65,
   drag: DEFAULT_EDGES,
   wheel: DEFAULT_EDGES,
+  wheelSideways: false,
   wheelDistance: 240,
   wheelEdgeSlop: 32,
 };
@@ -199,6 +208,12 @@ export type ZoomProviderProps = {
    * "/writing/slug") so a reload or shared link lands on that item's own page.
    */
   history?: false | { mode: "session" | "item"; url?: (id: string) => string };
+  /**
+   * Stream: the title shown above the first card of each section (sources give theirs
+   * with data-zoom-section, or ZoomSource's section prop). Defaults to the section's
+   * name in an h2.zoom-stream-title; style that like the page's own section titles.
+   */
+  renderSectionTitle?: (section: string) => ReactNode;
   /** Draw tuning aids: the wheel-dismiss edge zones in each card. */
   debug?: boolean;
   /** Accessible name for each destination card. */
@@ -222,7 +237,7 @@ type Layout = {
   /** One natively scrolled column of content-height cards (implies vertical). */
   stream: boolean;
 };
-type SourceEntry = { id: string; group: string; el: HTMLElement };
+type SourceEntry = { id: string; group: string; el: HTMLElement; section?: string };
 type CardValues = { x: MotionValue<number>; y: MotionValue<number>; s: MotionValue<number>; o: MotionValue<number> };
 type HeroContent = { children: ReactNode; className?: string; style?: CSSProperties; live: boolean };
 type Item = {
@@ -611,6 +626,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const zoomOpacity = useMotionValue(1);
   const dimOpacity = useMotionValue(0);
   const fade = useMotionValue(0); // reduced motion only
+  /** Stream section titles: they fade in and out with the neighbouring cards. */
+  const extrasOpacity = useMotionValue(1);
 
   const timing = (): ZoomTiming => ({ ...defaultTiming, ...latest.current.timing });
   const landing = (): ZoomLanding => ({ ...defaultLanding, ...latest.current.landing });
@@ -797,7 +814,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const sc = streamRef.current;
     const card = cardEls.current.get(S.ids[j]);
     if (!sc || !card) return;
-    const top = Math.max(0, card.offsetTop - S.L!.top);
+    // A card that starts a section opens with its section's title in view above it.
+    const title = card.previousElementSibling as HTMLElement | null;
+    const from = title?.hasAttribute("data-zoom-section-title") ? title.offsetTop : card.offsetTop;
+    const top = Math.max(0, from - S.L!.top);
     if (smooth) sc.scrollTo({ top, behavior: "smooth" });
     else sc.scrollTop = top;
   };
@@ -1000,6 +1020,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       S.ids.forEach((id, j) => {
         if (j !== S.index) getItem(id, j).cv.o.set(p * p);
       });
+      extrasOpacity.set(p * p);
     }
   };
   const updateDerived = () => {
@@ -1167,6 +1188,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.pendingOpen = id;
     S.origin = entry.el;
     S.mode = "zoom";
+    extrasOpacity.jump(1);
     setPhase("opening");
     ids.forEach((i, j) => resetItem(getItem(i, j)));
     track.jump(trackAt(S.index)); // so the freshly mounted track renders in place
@@ -1343,6 +1365,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const gesturesRef = useRef<{ refresh(): void } | null>(null);
 
   const openDone = () => {
+    streamRef.current?.querySelectorAll<HTMLElement>("[data-zoom-section-title]").forEach((el) => (el.style.transform = ""));
     S.mode = "zoom";
     // Drag progress is measured against the visible item's own source.
     const active = items.current.get(S.ids[S.index]);
@@ -1456,6 +1479,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
         vs: Z.vs * C.s + Z.s * C.vs,
       });
     });
+    // Stream section titles aren't cards: hold each where it is on screen by giving it
+    // the zoom being folded away (they fade out with the close from there).
+    if (L.stream) {
+      const sc = streamRef.current;
+      sc?.querySelectorAll<HTMLElement>("[data-zoom-section-title]").forEach((el) => {
+        const px = el.offsetLeft;
+        const py = el.offsetTop - (sc?.scrollTop ?? 0);
+        el.style.transformOrigin = "0 0";
+        el.style.transform = `translate(${Z.x + Z.s * px - px}px, ${Z.y + Z.s * py - py}px) scale(${Z.s})`;
+      });
+    }
     zx.jump(0);
     zy.jump(0);
     zs.jump(1);
@@ -1953,7 +1987,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const cleanups = [...document.querySelectorAll<HTMLElement>(selector)].map((el) => {
       const id = el.dataset.zoomSource;
       if (!id) return () => {};
-      const unregister = register({ id, group: el.dataset.zoomGroup ?? "default", el });
+      const unregister = register({ id, group: el.dataset.zoomGroup ?? "default", el, section: el.dataset.zoomSection });
       const trigger = el.closest<HTMLElement>("a, button") ?? el;
       const onClick = (e: MouseEvent) => {
         // Let modified clicks through so a link can still open in a new tab.
@@ -2028,7 +2062,16 @@ export function ZoomProvider(props: ZoomProviderProps) {
                     : { x: track }
               }
             >
-              {session.ids.map((id, j) => (
+              {session.ids.map((id, j) => {
+                const section = layout.stream ? sources.current.get(id)?.section : undefined;
+                const startsSection = !!section && section !== (j > 0 ? sources.current.get(session.ids[j - 1])?.section : undefined);
+                return (
+                <Fragment key={id}>
+                {startsSection && (
+                  <motion.div className="zoom-stream-title-row" style={{ width: layout.cardW, opacity: extrasOpacity }} data-zoom-section-title="">
+                    {props.renderSectionTitle ? props.renderSectionTitle(section!) : <h2 className="zoom-stream-title">{section}</h2>}
+                  </motion.div>
+                )}
                 <ZoomCard
                   key={id}
                   id={id}
@@ -2046,7 +2089,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
                   makeContext={cardContext}
                   setCardEl={setCardEl}
                 />
-              ))}
+                </Fragment>
+                );
+              })}
             </motion.div>
           )}
         </motion.div>

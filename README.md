@@ -23,6 +23,10 @@ and closing sends every card back to its own source.
   (`Portfolio.tsx`)
 - `standalone/portfolio/` — the portfolio at its simplest: plain markup, one island, one
   stylesheet (`npm run build:portfolio` → `dist/portfolio.html`). Start here to map it onto a site.
+- `standalone/portfolio-icons/` — the same, as a second prototype: every piece opens into one
+  stream (projects, writing, then About with a call to action) under section titles, and each
+  card leads with its image as an icon beside the title (→ `dist/portfolio-icons.html`).
+  Both are built by `standalone/build.py <folder>`.
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.
@@ -148,6 +152,11 @@ React island, or keep the markup in Astro and use one small island with `scan`
   `true`/`false` turn a gesture on or off at both edges; `"top"`, `"bottom"` and `"both"` also work.
   When an edge is off, that gesture just scrolls the card (with the browser's own bounce).
   `wheelDistance` sets how far past the edge you scroll to close (px, default 240).
+  In vertical layouts (feed, stream), `wheelSideways: true` also closes on a sideways
+  trackpad or wheel scroll. It's off by default: on desktop trackpads a sideways swipe
+  mixes in vertical motion and momentum too unevenly to close dependably. Sideways touch
+  and mouse drags close either way; a sideways scroll otherwise does nothing (and never
+  reaches the browser's swipe-back).
   A swipe that runs into an edge never closes the card; a second swipe made at the
   edge does, and it's recognised right away: on a trackpad by the scroll speed
   dipping and picking up again (momentum only ever slows), on a mouse wheel by a
@@ -169,20 +178,26 @@ React island, or keep the markup in Astro and use one small island with `scan`
   no paging, nothing to push through between pieces. The card under the top third of the
   screen is the visible one (its source is the hidden one, and it's the one that flies
   home). Close with the close button (it stays in view while reading), Escape, or by
-  dragging or scrolling sideways. Made for long reads (case studies, essays):
+  dragging sideways (scrolling sideways too, with `dismiss.wheelSideways`). Made for long
+  reads (case studies, essays):
 
   ```tsx
   <ZoomProvider layout="stream" flyHome="visible" groupOpacity={0.35} ...>
   ```
+
+  Sections: give sources a section (`data-zoom-section="Writing"`, or `ZoomSource`'s
+  `section` prop) and the stream shows that title above the first card of each section,
+  so one group can hold projects, writing and an About card in one stream. The title is
+  an `h2.zoom-stream-title` by default; `renderSectionTitle={(s) => <h2 className="…">{s}</h2>}`
+  draws your own, e.g. the page's own section-title style. Titles fade with the close.
 - `orientation` — how a pager's cards are laid out and swiped through:
   - `"horizontal"` (default): side by side. Swipe sideways to page; pull down to close.
   - `"vertical"`: stacked like a feed, one card per page. Swipe, drag or scroll up and
-    down to page (Up/Down arrows too); drag or scroll a card sideways, either way, to
-    close (Escape and the close button still work). A card's own content scrolls first;
+    down to page (Up/Down arrows too); drag a card sideways, either way, to close
+    (Escape and the close button still work). A card's own content scrolls first;
     paging takes over at its top and bottom, and as with closing, a swipe that runs
-    into the edge doesn't turn the page — a new swipe there does. `dismiss.drag` and
-    `dismiss.wheel` set to `false` turn the sideways close off; other edge settings
-    don't apply. Tapping above or below the card pages, beside it closes. Cards don't
+    into the edge doesn't turn the page — a new swipe there does. `dismiss.drag` set to
+    `false` turns the sideways drag close off; other edge settings don't apply. Tapping above or below the card pages, beside it closes. Cards don't
     bounce at their ends (a bounce made the next swipe hard to recognise).
 
   ```tsx
