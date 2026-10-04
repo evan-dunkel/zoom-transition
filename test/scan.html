@@ -2,6 +2,9 @@
 body{margin:0;font-family:sans-serif;min-height:300vh} main{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:24px}
 .tile img,.tile .ph{display:block;width:100%;aspect-ratio:1;border-radius:12px}
 .project .hero{aspect-ratio:16/9;border-radius:0}
+/* The hero differs from its tile on purpose (square, 12px corner vs 16:9, 32px corner,
+   with a shadow), so the flight has a crop, a corner and a shadow to carry. */
+.project [data-zoom-hero]{margin:10px;border-radius:32px;overflow:hidden;box-shadow:0 18px 36px -18px rgba(0,0,0,.45)}
 .project{padding-bottom:40px} .project h2,.project p{margin:16px 24px}
 </style><link rel="stylesheet" href="../src/zoom/zoom.css"></head><body>
 <main>

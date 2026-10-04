@@ -86,7 +86,7 @@ for (const [label, open, tile, card] of [
       });
     const corners = () => page.evaluate(() => (window as any).__corners as number[]);
     // Radii are written as Figma values and scaled for corner smoothing where supported.
-    const k = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--smooth")) || 1);
+    const k = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--zoom-smooth")) || 1);
     const [tileR, cardR] = [tile * k, card * k];
     const lo = Math.min(tileR, cardR) - 0.5;
     const hi = Math.max(tileR, cardR) + 0.5;
@@ -120,7 +120,7 @@ test("card, image and close button are concentric, with an even inset around the
     const s = surfaceEl.getBoundingClientRect();
     const i = imageEl.getBoundingClientRect();
     const x = card.querySelector("[data-zoom-close]")!.getBoundingClientRect();
-    const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--smooth")) || 1;
+    const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--zoom-smooth")) || 1;
     const R = parseFloat(getComputedStyle(surfaceEl).borderTopRightRadius) / k;
     const r = parseFloat(getComputedStyle(imageEl).borderTopRightRadius) / k;
     return {

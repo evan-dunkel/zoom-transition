@@ -625,6 +625,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const zs = useMotionValue(1);
   const zoomOpacity = useMotionValue(1);
   const dimOpacity = useMotionValue(0);
+  /** The backdrop filter's layer: the dim's share of full strength (0 to 1), so a light
+   *  dim still gets a complete blur. */
+  const backdropOpacity = useMotionValue(0);
   const fade = useMotionValue(0); // reduced motion only
   /** Stream section titles: they fade in and out with the neighbouring cards. */
   const extrasOpacity = useMotionValue(1);
@@ -963,10 +966,12 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   /* -------------------------------------------------------------- dim & fades */
 
-  const restingDim = () => {
+  /** The dim's share of full strength while open: dragging a card fades some of it. */
+  const restingShare = () => {
     const d = dismiss();
-    return S.dimMax * (1 - clamp((1 - zs.get()) / d.maxShrink, 0, 1) * d.dimFade);
+    return 1 - clamp((1 - zs.get()) / d.maxShrink, 0, 1) * d.dimFade;
   };
+  const restingDim = () => S.dimMax * restingShare();
   /** How far the active card is between its source (0) and fully open (1). */
   const activeProgress = () => {
     const it = items.current.get(S.ids[S.index]);
@@ -1030,6 +1035,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       const f = clamp(fade.get(), 0, 1);
       zoomOpacity.set(f);
       dimOpacity.set(restingDim() * f);
+      backdropOpacity.set(restingShare() * f);
     } else if (S.mode === "cards") {
       // Continuous from wherever the dim was when this transition started,
       // heading to full dim when open and to none at the sources.
@@ -1039,14 +1045,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
         p >= p0 ? (p0 >= 0.999 ? S.dimMax : d0 + ((S.dimMax - d0) * (p - p0)) / (1 - p0)) : p0 <= 0.001 ? 0 : (d0 * p) / p0;
       zoomOpacity.set(1);
       dimOpacity.set(d);
+      backdropOpacity.set(S.dimMax > 0 ? clamp(d / S.dimMax, 0, 1) : clamp(p, 0, 1));
     } else if (S.phase === "opening") {
       const t = clamp((zs.get() - S.s0) / (1 - S.s0), 0, 1);
       dimOpacity.set(S.dimMax * t);
+      backdropOpacity.set(t);
       // Only the smallest quarter of the zoom fades, so the card never pops in.
       zoomOpacity.set(clamp(t * 4, 0, 1));
     } else {
       zoomOpacity.set(1);
       dimOpacity.set(restingDim());
+      backdropOpacity.set(restingShare());
     }
   };
   useEffect(() => {
@@ -1814,6 +1823,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     zs.jump(1);
     zoomOpacity.jump(1);
     dimOpacity.jump(0);
+    backdropOpacity.jump(0);
     setSession(null);
     // Keyboard users get focus back on what they opened. After a tap or click nothing
     // keeps focus: returning it would draw a ring around the tile on touch screens.
@@ -2047,6 +2057,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         role="dialog"
         aria-modal="true"
       >
+        <motion.div className="zoom-backdrop" style={{ opacity: backdropOpacity }} />
         <motion.div ref={dimRef} className="zoom-dim" style={{ opacity: dimOpacity }} />
         <motion.div ref={zoomerRef} className="zoom-zoomer" style={{ x: zx, y: zy, scale: zs, opacity: zoomOpacity }}>
           {session && layout && (

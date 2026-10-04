@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../src/zoom/zoom.css">
+<link rel="stylesheet" href="../../src/zoom/corners.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,19 +34,19 @@
     <h2 id="work" class="label">Selected work</h2>
     <ul class="work">
       <li><a class="tile" href="/work/tidewater">
-        <div class="tile-image" data-zoom-source="tidewater" data-zoom-group="work"><img src="images/tidewater.svg" alt=""></div>
+        <div class="tile-image zoom-concentric" data-zoom-source="tidewater" data-zoom-group="work"><img src="images/tidewater.svg" alt=""></div>
         <h3>Tidewater Transit</h3><p>Trip planning for a coastal city’s ferries and buses · 2025</p>
       </a></li>
       <li><a class="tile" href="/work/fernwood">
-        <div class="tile-image" data-zoom-source="fernwood" data-zoom-group="work"><img src="images/fernwood.svg" alt=""></div>
+        <div class="tile-image zoom-concentric" data-zoom-source="fernwood" data-zoom-group="work"><img src="images/fernwood.svg" alt=""></div>
         <h3>Fernwood Reader</h3><p>An e-reading app for an independent press · 2024</p>
       </a></li>
       <li><a class="tile" href="/work/atlas">
-        <div class="tile-image" data-zoom-source="atlas" data-zoom-group="work"><img src="images/atlas.svg" alt=""></div>
+        <div class="tile-image zoom-concentric" data-zoom-source="atlas" data-zoom-group="work"><img src="images/atlas.svg" alt=""></div>
         <h3>Atlas Clinic</h3><p>Scheduling for a network of community clinics · 2024</p>
       </a></li>
       <li><a class="tile" href="/work/kiln">
-        <div class="tile-image" data-zoom-source="kiln" data-zoom-group="work"><img src="images/kiln.svg" alt=""></div>
+        <div class="tile-image zoom-concentric" data-zoom-source="kiln" data-zoom-group="work"><img src="images/kiln.svg" alt=""></div>
         <h3>Kiln</h3><p>A design system for a handmade ceramics marketplace · 2023</p>
       </a></li>
     </ul>
@@ -78,7 +79,7 @@
 
 <template data-zoom-destination="tidewater">
   <article class="piece">
-    <div class="piece-image" data-zoom-hero><img src="images/tidewater.svg" alt="Two phone screens of the Tidewater trip planner"></div>
+    <div class="piece-image zoom-concentric" data-zoom-hero><img src="images/tidewater.svg" alt="Two phone screens of the Tidewater trip planner"></div>
     <div class="piece-text">
       <p class="meta">Project · 2025</p>
       <h2>Tidewater Transit</h2>
@@ -97,7 +98,7 @@
 
 <template data-zoom-destination="fernwood">
   <article class="piece">
-    <div class="piece-image" data-zoom-hero><img src="images/fernwood.svg" alt="The Fernwood house serif"></div>
+    <div class="piece-image zoom-concentric" data-zoom-hero><img src="images/fernwood.svg" alt="The Fernwood house serif"></div>
     <div class="piece-text">
       <p class="meta">Project · 2024</p>
       <h2>Fernwood Reader</h2>
@@ -116,7 +117,7 @@
 
 <template data-zoom-destination="atlas">
   <article class="piece">
-    <div class="piece-image" data-zoom-hero><img src="images/atlas.svg" alt="A bar chart of clinic arrivals"></div>
+    <div class="piece-image zoom-concentric" data-zoom-hero><img src="images/atlas.svg" alt="A bar chart of clinic arrivals"></div>
     <div class="piece-text">
       <p class="meta">Project · 2024</p>
       <h2>Atlas Clinic</h2>
@@ -134,7 +135,7 @@
 
 <template data-zoom-destination="kiln">
   <article class="piece">
-    <div class="piece-image" data-zoom-hero><img src="images/kiln.svg" alt="Kiln's core shapes on a clay-coloured ground"></div>
+    <div class="piece-image zoom-concentric" data-zoom-hero><img src="images/kiln.svg" alt="Kiln's core shapes on a clay-coloured ground"></div>
     <div class="piece-text">
       <p class="meta">Project · 2023</p>
       <h2>Kiln</h2>
@@ -151,7 +152,7 @@
 
 <template data-zoom-destination="interruptible">
   <article class="piece">
-    <div class="piece-image wide" data-zoom-hero><img src="images/interruptible.svg" alt=""></div>
+    <div class="piece-image wide zoom-concentric" data-zoom-hero><img src="images/interruptible.svg" alt=""></div>
     <div class="piece-text">
       <p class="meta">Essay · Sep 2026 · 6 min read</p>
       <h2>Interruptible by default</h2>
@@ -166,7 +167,7 @@
 
 <template data-zoom-destination="springs">
   <article class="piece">
-    <div class="piece-image wide" data-zoom-hero><img src="images/springs.svg" alt=""></div>
+    <div class="piece-image wide zoom-concentric" data-zoom-hero><img src="images/springs.svg" alt=""></div>
     <div class="piece-text">
       <p class="meta">Experiment · Aug 2026 · 4 min read</p>
       <h2>Springs you can feel</h2>
@@ -180,7 +181,7 @@
 
 <template data-zoom-destination="shelf">
   <article class="piece">
-    <div class="piece-image wide" data-zoom-hero><img src="images/shelf.svg" alt=""></div>
+    <div class="piece-image wide zoom-concentric" data-zoom-hero><img src="images/shelf.svg" alt=""></div>
     <div class="piece-text">
       <p class="meta">Essay · Jun 2026 · 7 min read</p>
       <h2>The shelf is the interface</h2>
@@ -194,7 +195,7 @@
 
 <template data-zoom-destination="case-studies">
   <article class="piece">
-    <div class="piece-image wide" data-zoom-hero><img src="images/case-studies.svg" alt=""></div>
+    <div class="piece-image wide zoom-concentric" data-zoom-hero><img src="images/case-studies.svg" alt=""></div>
     <div class="piece-text">
       <p class="meta">Note · Feb 2026 · 5 min read</p>
       <h2>Case studies people finish</h2>

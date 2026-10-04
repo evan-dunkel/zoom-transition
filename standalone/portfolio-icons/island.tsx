@@ -15,9 +15,7 @@ createRoot(document.getElementById("zoom")!).render(
     }
     // Sections come from data-zoom-section; the title matches the page's .section-title.
     renderSectionTitle={(section) => <h2 className="section-title">{section}</h2>}
-    // The dim runs all the way up so the page's blur behind it (style.css) is complete;
-    // how dark it gets is --zoom-dim-color.
-    dim={1}
+    dim={0.3} // over the blurred page (--zoom-backdrop-filter in style.css)
     landing={{ widthRatio: 0.86, topOffset: 0.05 }}
     flyHome="visible"
     groupOpacity={0.35}

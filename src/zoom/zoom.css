@@ -1,4 +1,12 @@
-/* Zoom system. Theme with the --zoom-* custom properties. */
+/* Zoom system. Theme with the --zoom-* custom properties.
+
+   Corner geometry, set once (design values, e.g. from Figma):
+     --zoom-radius   the card's corner (default 28px)
+     --zoom-inset    how far in the card's content sits, e.g. an image (default 10px)
+   Everything else follows: the card's corner, the close button concentric with it, and
+   .zoom-concentric for anything inset on the card (and its tile on the page), whose
+   corner is radius − inset. Load corners.css as well for smoothed (iOS-style) corners:
+   it sets --zoom-smooth and --zoom-smooth-shape, which every derived corner uses. */
 .zoom-root {
   position: absolute;
   inset: 0;
@@ -19,6 +27,9 @@
 .zoom-root[data-phase="closing"] .zoom-clone { pointer-events: auto; cursor: pointer; }
 
 .zoom-dim { position: absolute; inset: 0; background: var(--zoom-dim-color, #000); opacity: 0; pointer-events: none; }
+/* The page behind, filtered (e.g. --zoom-backdrop-filter: blur(18px)). Its own layer, at
+   full strength whenever the card is fully open, however light the dim is. */
+.zoom-backdrop { position: absolute; inset: 0; opacity: 0; pointer-events: none; -webkit-backdrop-filter: var(--zoom-backdrop-filter, none); backdrop-filter: var(--zoom-backdrop-filter, none); }
 .zoom-zoomer { position: absolute; inset: 0; transform-origin: 0 0; }
 .zoom-track { position: absolute; top: 0; left: 0; height: 100%; }
 
@@ -30,8 +41,8 @@
   position: absolute;
   transform-origin: 0 0;
   overflow: hidden;
-  border-radius: var(--zoom-card-radius, 28px);
-  corner-shape: var(--zoom-corner-shape, round); /* e.g. superellipse(1.36) for smoothed corners */
+  border-radius: var(--zoom-card-radius, calc(var(--zoom-radius, 28px) * var(--zoom-smooth, 1)));
+  corner-shape: var(--zoom-corner-shape, var(--zoom-smooth-shape, round));
   color: var(--zoom-card-color, inherit);
 }
 .zoom-card-scroll {
@@ -75,12 +86,12 @@
 .zoom-dragging .zoom-stream,
 .zoom-root[data-phase="closing"] .zoom-stream { overflow-y: hidden; }
 
-/* Size and inset are themeable: to sit it concentric with a card's corner, put its centre
-   on the corner's centre (inset = card radius − size / 2). */
+/* Concentric with the card's corner by default: its centre sits on the corner's centre
+   (inset = --zoom-radius − size / 2). --zoom-close-inset overrides. */
 .zoom-close {
   position: absolute;
-  top: var(--zoom-close-inset, 14px);
-  right: var(--zoom-close-inset, 14px);
+  top: var(--zoom-close-inset, calc(var(--zoom-radius, 28px) - var(--zoom-close-size, 30px) / 2));
+  right: var(--zoom-close-inset, calc(var(--zoom-radius, 28px) - var(--zoom-close-size, 30px) / 2));
   display: grid;
   place-items: center;
   width: var(--zoom-close-size, 30px);
@@ -111,8 +122,8 @@
   display: flow-root; /* keeps the destination's margins inside the card (they'd escape in a stream) */
   min-height: 100%;
   overflow: clip; /* keep the content inside the rounded corners when it bounces */
-  border-radius: var(--zoom-card-radius, 28px);
-  corner-shape: var(--zoom-corner-shape, round); /* e.g. superellipse(1.36) for smoothed corners */
+  border-radius: var(--zoom-card-radius, calc(var(--zoom-radius, 28px) * var(--zoom-smooth, 1)));
+  corner-shape: var(--zoom-corner-shape, var(--zoom-smooth-shape, round));
   background: var(--zoom-card-bg, #fff);
 }
 /* A zero-height sticky bar at the top of the content: the close button stays put
@@ -151,3 +162,10 @@
 .zoom-root[data-armed-bottom] .zoom-card:not([inert]) .zoom-debug-bottom { background-color: rgba(255, 45, 120, 0.38); }
 .zoom-root[data-armed-top] .zoom-card:not([inert]) .zoom-debug-top span::after,
 .zoom-root[data-armed-bottom] .zoom-card:not([inert]) .zoom-debug-bottom span::after { content: " · armed"; }
+
+/* For anything inset on a card by --zoom-inset (a cover image, an icon), and the tile it
+   flies from on the page: the corner concentric with the card's. */
+.zoom-concentric {
+  border-radius: calc((var(--zoom-radius, 28px) - var(--zoom-inset, 10px)) * var(--zoom-smooth, 1));
+  corner-shape: var(--zoom-smooth-shape, round);
+}

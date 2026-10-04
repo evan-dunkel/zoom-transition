@@ -215,6 +215,19 @@ behind is live and a tap can reopen).
 - Unmounting the provider while not idle (route change, Astro page swap) restores
   scrolling, the background's `inert`, hidden sources, and removes flights.
 
+### Corners and backdrop (library CSS)
+
+`zoom.css` derives corner geometry from `--zoom-radius` and `--zoom-inset` (design values):
+the card's `border-radius` is `--zoom-card-radius` if set, else radius × `--zoom-smooth`;
+`corner-shape` is `--zoom-corner-shape`, else `--zoom-smooth-shape`; the close button's inset
+is `--zoom-close-inset`, else radius − size / 2; `.zoom-concentric` is (radius − inset) ×
+smooth. `corners.css` (optional) sets the smoothing tokens on `:root`. The derived values are
+computed where they're used (on the card, the button, the element with the class), so
+`--zoom-radius` can be set per container. `.zoom-backdrop` sits under `.zoom-dim` with
+`backdrop-filter: var(--zoom-backdrop-filter, none)`; its opacity is the dim's share of full
+strength (`backdropOpacity`, set beside `dimOpacity` in `updateDerived`), so the filter is
+complete when open even with a light dim (opacity on one element would fade the blur too).
+
 ### Card DOM
 ```
 .zoom-card            transparent rounded clip (transforms, opacity)
@@ -427,6 +440,14 @@ See README for details.
 6. Option to auto-open from URL hash (`#id`) on load, if wanted.
 
 ## 9. Testing notes
+- `flight-invariants.spec.ts` guards what every layout inherits, on the plain harness
+  (`test/scan.html`: a square 12px tile opening into a 16:9, 32px hero with a shadow): even
+  crop, corner tween without a landing jump, shadow fading with the flight, focus by input
+  modality, derived corner geometry (`--zoom-radius`, `--zoom-inset`, `.zoom-concentric`,
+  the concentric close button), and the backdrop layer. Each flight test was checked to
+  fail with its old bug put back (corners off, shadow at full, the old crop).
+- Refactors that shouldn't change pixels: screenshot every prototype before and after and
+  compare (the corner-token move to the library was pixel-identical across 10 views).
 - `npm test` runs `tests/e2e` (@playwright/test, Chromium): per-edge dismiss options
   for wheel, touch and mouse drags (each "off" case is paired with the same gesture
   closing by default, so a passing "stays open" means something), debug bands per

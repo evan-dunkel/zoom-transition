@@ -17,6 +17,7 @@ and closing sends every card back to its own source.
   - `flight.ts` — the flying copy of the hero
   - `springs.ts` — SwiftUI-style springs (duration + bounce) mapped to Motion
   - `zoom.css` — required styles; theme with the `--zoom-*` properties
+  - `corners.css` — optional: smoothed corners matched to Figma's iOS-style 60%
 - `demo/` — three prototypes: the Book Store as shelves that page sideways
   (`BookStore.tsx`), the Book Store as a feed that pages up and down (`BookFeed.tsx`),
   and a design portfolio of long reads that opens into one continuous stream
@@ -245,6 +246,35 @@ Internally, the shared zoom is folded into each card's own transform at the
 moment of interruption (position and velocity), so the next spring starts
 from exactly what's on screen.
 
+## Building a new layout
+
+The library owns how things move, so a new layout (portfolio or not) inherits every fix
+to the motion. Guarded by `tests/e2e/flight-invariants.spec.ts`, against a plain harness
+rather than any prototype:
+
+- the crop between a source's shape and its hero's eases evenly with the motion;
+- corner radii tween between source and hero in on-screen px, without a jump at landing;
+- the hero's shadow fades with the flight and is never cut by the crop;
+- after a tap or click nothing is left focused; keyboard users get focus moved and returned;
+- the card's corner, the close button and anything inset on the card stay concentric;
+- a backdrop filter is complete whenever a card is open, however light the dim.
+
+What the page still decides, and how to keep it right:
+
+- **Corner geometry: two numbers.** Set `--zoom-radius` (the card's corner, as in Figma)
+  and `--zoom-inset` (how far in the image or icon sits). The card's corner, the close button
+  (on the corner's centre: radius − `--zoom-close-size` / 2) and `.zoom-concentric`
+  (radius − inset) follow. Put `zoom-concentric` on the hero and on the tile it flies from,
+  so both ends share a corner; a more specific rule of your own setting `border-radius`
+  wins over it, so leave radius off those elements.
+- **Inset with padding, not margin**, on the destination's wrapper (`padding: var(--zoom-inset)`).
+  The card contains margins too (`flow-root`), but padding keeps the inset part of the card.
+- **Reading over the page.** Titles or anything else drawn between stream cards sit on the
+  dimmed page; set `--zoom-backdrop-filter` (e.g. `blur(18px)`) so they read cleanly.
+- **One-line metadata:** `text-wrap: pretty` (or any `text-wrap`) on paragraphs overrides
+  `white-space: nowrap`; give one-line text `text-wrap: nowrap` itself.
+- **Gestures:** sideways trackpad scrolling doesn't close by default (`dismiss.wheelSideways`).
+
 ## Development
 
 ```sh
@@ -265,10 +295,12 @@ npm test               # Playwright: builds the demo and harness, serves them, r
   one end's to the other's in flight, in on-screen pixels, rather than scaling with the copy.
   A crop (e.g. a square thumbnail opening into a wide image) happens inside the flight with
   rounded corners; the hero's shadow wraps the visible shape and is never cut by it.
-- Corner smoothing: cards take `corner-shape` from `--zoom-corner-shape`; flights copy the
-  hero's. To match Figma's iOS-style 60% smoothing, scale each Figma radius by 1.23 and use
-  `corner-shape: superellipse(1.36)` where supported (`@supports (corner-shape: superellipse(2))`),
-  falling back to the plain Figma radius elsewhere (fitted numerically; see the standalone styles).
+- Corner smoothing: load `corners.css` after `zoom.css`. It sets `--zoom-smooth` (1.23 where the
+  browser draws `corner-shape`, else 1) and `--zoom-smooth-shape` (`superellipse(1.36)`, else
+  `round`), a numerical fit to Figma's iOS-style 60% within 0.7% of the radius, falling back to
+  the plain Figma radius. Every corner zoom.css derives uses them; for your own elements write
+  `border-radius: calc(12px * var(--zoom-smooth)); corner-shape: var(--zoom-smooth-shape)`.
+  Flights copy the hero's corner shape.
 - Focus: opening moves focus into the card (the close button for keyboard users, the card
   itself after a tap or click, so touch screens don't draw a ring); closing returns it to
   the source for keyboard users and leaves nothing focused otherwise.

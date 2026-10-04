@@ -2,7 +2,7 @@ import subprocess, pathlib
 subprocess.run(["npx","esbuild","demo/main.tsx","--bundle","--minify","--format=iife","--target=es2020",
   "--define:process.env.NODE_ENV=\"production\"","--outfile=dist/app.js"],check=True)
 js=pathlib.Path("dist/app.js").read_text().replace("</script","<\\/script")
-css=pathlib.Path("src/zoom/zoom.css").read_text()+"\n"+pathlib.Path("demo/demo.css").read_text()
+css="\n".join(pathlib.Path(f).read_text() for f in ["src/zoom/zoom.css","src/zoom/corners.css","demo/demo.css"])
 html=f'''<!DOCTYPE html>
 <html lang="en">
 <head>
