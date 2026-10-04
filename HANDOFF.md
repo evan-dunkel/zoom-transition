@@ -112,6 +112,13 @@ behind is live and a tap can reopen).
   `cx, cy, s` (centre + uniform scale). `fit(rect)` = cover-fit scale + crop
   insets, so a square source can open into a wide hero without stretching.
 - `retarget(rect)` re-bases from the current state (springs keep velocity).
+- Flight DOM: `.zoom-clone` > `.zoom-clone-shadow` + `.zoom-clone-window` > copy (and live
+  host). The crop (aspect change between source and hero) shrinks the window to the
+  visible part with `overflow: hidden`, the blended radius and the hero's `corner-shape`;
+  the shadow layer takes the same inset, so it wraps the visible shape. Uncropped, the
+  window clips nothing (3D overhangs survive). The only clip-path left on the clone is the
+  scroll-follow band. (The crop used to be a clip-path on the clone: it cut the shadow and
+  squared the cropped corners, visible on writing thumbnails.)
 - Shadow: the hero element's own `box-shadow` (read in `measureHero`) is moved off the
   copy onto a `.zoom-clone-shadow` layer behind it, whose opacity follows the item's
   `progress` (`shadowOpacity`). Sources rarely have the hero's shadow, so carried at
@@ -251,6 +258,11 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   off. `.zoom-card-content` is `display: flow-root` so a destination's top margin stays
   inside its card (in a stream nothing else contains it, and the card's surface started
   below the margin, leaving the image flush with the top).
+  Wheel gestures in vertical layouts are locked to one axis (`wheelAxis`: decided on a
+  gesture's first event, released after 120 ms quiet, switched to sideways by a clearly
+  sideways event), and the stream has `overscroll-behavior-x: none`: a diagonal start
+  used to scroll the column, rubber-band sideways, then pull, which read as a jump.
+  A wheel pull that starts while a drag's spring-back is running picks up from there.
   Gestures: vertical drags and wheel are left native; sideways closes; a tap off every
   card closes; arrows scroll. The column stops scrolling while dragged or closing.
 - Vertical pager (`orientation: "vertical"`): the axes swap. Drag axis is decided

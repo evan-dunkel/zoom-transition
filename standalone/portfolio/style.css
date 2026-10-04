@@ -22,6 +22,16 @@
   color-scheme: dark;
 }
 
+/* Corner smoothing, matched to Figma's iOS-style corners (corner smoothing 60%).
+   Radii are written as their Figma values and multiplied by --smooth. Where the browser
+   draws corner-shape, a superellipse fitted to Figma's curve (within 0.7% of the radius)
+   needs a 1.23× box; elsewhere the plain radius is the closest circle (Figma's curve
+   keeps the circle's middle arc; it only eases into the edges over 1.6× the radius). */
+:root { --smooth: 1; --smooth-shape: round; }
+@supports (corner-shape: superellipse(2)) {
+  :root { --smooth: 1.23; --smooth-shape: superellipse(1.36); }
+}
+
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
 img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -40,22 +50,23 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 .work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
 @media (min-width: 700px) { .work { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px 24px; } }
-.tile-image { aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden; } /* same corner as on the card */
+.tile-image { aspect-ratio: 4 / 3; border-radius: calc(18px * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; } /* same corner as on the card */
 .tile h3 { margin: 12px 0 0; font: 700 21px/1.2 var(--display); letter-spacing: -0.01em; }
 .tile p { margin: 3px 0 0; font-size: 14px; color: var(--muted); }
 
 .notes li + li { border-top: 1px solid var(--line); }
 .row { display: flex; gap: 14px; padding: 14px 0; }
-.row-image { flex: none; width: 68px; aspect-ratio: 1; border-radius: 10px; overflow: hidden; }
+.row-image { flex: none; width: 68px; aspect-ratio: 1; border-radius: calc(10px * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; }
 .row h3 { margin: 2px 0 0; font: 700 18px/1.25 var(--display); }
 .row p { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
 .meta { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--muted); }
 
 /* ---------------------------------------------------------------- a piece, open */
 
-/* Concentric corners. The card's corner is 28 px; the image sits 10 px in on every side,
-   so its corner is 28 − 10 = 18 px; the close button (28 px across) sits on the same
-   centre, 14 px in from the card's corner, 4 px in from the image's. */
+/* Concentric corners (Figma values; smoothing scales them as above). The card's corner
+   is 28 px; the image sits 10 px in on every side, so its corner is 28 − 10 = 18 px; the
+   close button (28 px across) sits on the same centre, 14 px in from the card's corner,
+   4 px in from the image's. Smoothing keeps each corner's middle arc on that centre. */
 :root {
   --card-radius: 28px;
   --card-inset: 10px;
@@ -63,7 +74,8 @@ ul { margin: 0; padding: 0; list-style: none; }
   /* Theme the zoom (see src/zoom/zoom.css for every --zoom-* property). */
   --zoom-card-bg: var(--card);
   --zoom-card-color: var(--text);
-  --zoom-card-radius: var(--card-radius);
+  --zoom-card-radius: calc(var(--card-radius) * var(--smooth));
+  --zoom-corner-shape: var(--smooth-shape);
   --zoom-close-size: 28px;
   --zoom-close-inset: calc(var(--card-radius) - 14px);
   --zoom-close-bg: color-mix(in srgb, var(--card) 70%, transparent);
@@ -73,7 +85,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* The image sits on the card, inset, like a cover on a table. Padding (not margin) on
    the piece keeps the inset inside the card. */
 .piece { padding: var(--card-inset) var(--card-inset) 0; }
-.piece-image { aspect-ratio: 4 / 3; border-radius: var(--image-radius); overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.piece-image { aspect-ratio: 4 / 3; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
 .piece-image.wide { aspect-ratio: 16 / 9; }
 .piece-text { max-width: 620px; margin: 0 auto; padding: 22px 12px 40px; }
 .piece h2 { margin: 6px 0 0; font: 750 clamp(30px, 8cqw, 44px)/1.04 var(--display); letter-spacing: -0.025em; text-wrap: balance; }

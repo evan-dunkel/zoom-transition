@@ -50,6 +50,11 @@ Plus `src/zoom/` (the library) and `src/zoom/zoom.css`.
 />
 ```
 
+Corners are smoothed like Figma's iOS corners (60%): `--smooth` and `--smooth-shape` in
+`style.css` scale each radius by 1.23 and draw `corner-shape: superellipse(1.36)` where the
+browser supports it (a numerical fit to Figma's curve, within 0.7% of the radius), and fall
+back to the plain Figma radius elsewhere. Write radii as their Figma values times `--smooth`.
+
 Corners are concentric, set in `style.css`: the card's radius (28 px), the image's inset
 (10 px, as padding so it stays inside the card) and so the image's radius (18 px, also
 the tiles'), and the close button (28 px across, on the same centre via

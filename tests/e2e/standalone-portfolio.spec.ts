@@ -77,7 +77,7 @@ for (const [label, open, tile, card] of [
         (window as any).__corners = seen;
         const tick = () => {
           const el = document.querySelector<HTMLElement>(".zoom-clone");
-          const copy = el?.querySelector<HTMLElement>(":scope > :not(.zoom-clone-shadow)");
+          const copy = el?.querySelector<HTMLElement>(".zoom-clone-window > :first-child");
           const scale = el && /scale\(([\d.e-]+)\)/.exec(el.style.transform);
           if (copy && scale && copy.style.borderRadius) seen.push(parseFloat(copy.style.borderRadius) * Number(scale[1]));
           requestAnimationFrame(tick);
@@ -85,23 +85,26 @@ for (const [label, open, tile, card] of [
         requestAnimationFrame(tick);
       });
     const corners = () => page.evaluate(() => (window as any).__corners as number[]);
-    const lo = Math.min(tile, card) - 0.5;
-    const hi = Math.max(tile, card) + 0.5;
+    // Radii are written as Figma values and scaled for corner smoothing where supported.
+    const k = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--smooth")) || 1);
+    const [tileR, cardR] = [tile * k, card * k];
+    const lo = Math.min(tileR, cardR) - 0.5;
+    const hi = Math.max(tileR, cardR) + 0.5;
     await record();
     await page.locator(open).nth(1).click();
     await expect.poll(() => phase(page)).toBe("open");
     const opening = await corners();
     expect(opening.length).toBeGreaterThan(5);
-    expect(opening[0]).toBeCloseTo(tile, 0); // takes off with the tile's corner
-    expect(opening[opening.length - 1]).toBeCloseTo(card, 0); // lands with the card image's
+    expect(opening[0]).toBeCloseTo(tileR, 0); // takes off with the tile's corner
+    expect(opening[opening.length - 1]).toBeCloseTo(cardR, 0); // lands with the card image's
     for (const r of opening) expect(r >= lo && r <= hi).toBe(true); // never shrinks with the scale
     await record();
     await page.keyboard.press("Escape");
     await expect.poll(() => phase(page)).toBe("idle");
     const closing = await corners();
     expect(closing.length).toBeGreaterThan(3);
-    expect(closing[0]).toBeCloseTo(card, 0);
-    expect(closing[closing.length - 1]).toBeCloseTo(tile, 0);
+    expect(closing[0]).toBeCloseTo(cardR, 0);
+    expect(closing[closing.length - 1]).toBeCloseTo(tileR, 0);
     for (const r of closing) expect(r >= lo && r <= hi).toBe(true);
   });
 }
@@ -117,8 +120,9 @@ test("card, image and close button are concentric, with an even inset around the
     const s = surfaceEl.getBoundingClientRect();
     const i = imageEl.getBoundingClientRect();
     const x = card.querySelector("[data-zoom-close]")!.getBoundingClientRect();
-    const R = parseFloat(getComputedStyle(surfaceEl).borderTopRightRadius);
-    const r = parseFloat(getComputedStyle(imageEl).borderTopRightRadius);
+    const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--smooth")) || 1;
+    const R = parseFloat(getComputedStyle(surfaceEl).borderTopRightRadius) / k;
+    const r = parseFloat(getComputedStyle(imageEl).borderTopRightRadius) / k;
     return {
       inset: [i.top - s.top, i.left - s.left, s.right - i.right],
       card: [R, R],
@@ -155,4 +159,89 @@ test("a card's close button fades out as the card scrolls away, instead of being
   expect(mid).toBeLessThan(0.95); // on its way out
   expect(await opacityWhenBottomAt(40)).toBe(0); // gone before the edge reaches it
   expect(await opacityWhenBottomAt(400)).toBe(1); // and back when scrolled back
+});
+
+
+test("writing opens without its shadow or corners being cut by the crop", async ({ page }) => {
+  await page.goto("/dist/portfolio.html");
+  // Watch the flight while it's cropped (a square thumbnail opening into a wide image).
+  await page.evaluate(() => {
+    const seen: { clip: string; winInset: string; shadeInset: string; winRadius: string }[] = [];
+    (window as any).__crop = seen;
+    const tick = () => {
+      const el = document.querySelector<HTMLElement>(".zoom-clone");
+      const win = el?.querySelector<HTMLElement>(".zoom-clone-window");
+      const shade = el?.querySelector<HTMLElement>(".zoom-clone-shadow");
+      if (el && win && shade && win.style.overflow === "hidden")
+        seen.push({ clip: el.style.clipPath, winInset: win.style.inset, shadeInset: shade.style.inset, winRadius: win.style.borderRadius });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.locator(".row").nth(1).click();
+  await expect.poll(() => phase(page)).toBe("open");
+  const frames = await page.evaluate(() => (window as any).__crop as { clip: string; winInset: string; shadeInset: string; winRadius: string }[]);
+  expect(frames.length).toBeGreaterThan(2); // it was cropped for a while
+  for (const f of frames) {
+    expect(f.clip).toBe(""); // nothing cuts the flight as a whole (the shadow included)
+    expect(f.shadeInset).toBe(f.winInset); // the shadow wraps the visible, cropped shape
+    expect(parseFloat(f.winRadius)).toBeGreaterThan(0); // and its corners stay rounded
+  }
+});
+
+test("corners are smoothed where the browser can draw it", async ({ page }) => {
+  await page.goto("/dist/portfolio.html");
+  const supported = await page.evaluate(() => CSS.supports("corner-shape", "superellipse(2)"));
+  test.skip(!supported, "this browser has no corner-shape; plain radii are the fallback");
+  await page.locator(".tile").nth(1).click();
+  await expect.poll(() => phase(page)).toBe("open");
+  const shapes = await page.evaluate(() =>
+    [".tile-image", '[data-zoom-id="fernwood"].zoom-card', '[data-zoom-id="fernwood"] .zoom-card-content', '[data-zoom-id="fernwood"] [data-zoom-hero]'].map(
+      (sel) => getComputedStyle(document.querySelector(sel)!).getPropertyValue("corner-top-left-shape"),
+    ),
+  );
+  for (const s of shapes) expect(s).toContain("superellipse");
+});
+
+test("after a tap or click nothing is left focused; keyboard users keep their place", async ({ page }) => {
+  await page.goto("/dist/portfolio.html");
+  const focused = () =>
+    page.evaluate(() => {
+      const a = document.activeElement as HTMLElement | null;
+      if (!a || a === document.body) return "body";
+      if (a.matches("[data-zoom-close]")) return "close";
+      if (a.matches(".zoom-card")) return "card";
+      return a.className || a.tagName;
+    });
+  // Pointer: the open card takes focus (not its close button); closing leaves nothing focused.
+  await page.locator(".tile").nth(1).click();
+  await expect.poll(() => phase(page)).toBe("open");
+  expect(await focused()).toBe("card");
+  await page.locator('[data-zoom-id="fernwood"] [data-zoom-close]').click();
+  await expect.poll(() => phase(page)).toBe("idle");
+  expect(await focused()).toBe("body");
+  // Keyboard: Enter on a tile lands on the close button; Escape returns to the tile.
+  await page.locator(".tile").nth(1).focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => phase(page)).toBe("open");
+  expect(await focused()).toBe("close");
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page)).toBe("idle");
+  expect(await focused()).toBe("tile");
+});
+
+test("a sideways scroll pulls the card without the column scrolling under it", async ({ page }) => {
+  await page.goto("/dist/portfolio.html");
+  await page.locator(".tile").nth(1).click();
+  await expect.poll(() => phase(page)).toBe("open");
+  expect(await page.locator(".zoom-stream").evaluate((el) => getComputedStyle(el).overscrollBehaviorX)).toBe("none");
+  const top = await page.locator(".zoom-stream").evaluate((el) => el.scrollTop);
+  await page.mouse.move(215, 450);
+  // A sideways swipe with some vertical wobble in it: once it's sideways, it stays sideways.
+  for (const [dx, dy] of [[12, 6], [18, 10], [22, 14], [24, 18], [20, 22], [16, 12]]) {
+    await page.mouse.wheel(dx, dy);
+    await page.waitForTimeout(16);
+  }
+  expect(await page.locator(".zoom-stream").evaluate((el) => el.scrollTop)).toBe(top);
+  expect(await page.locator(".zoom-zoomer").evaluate((el) => getComputedStyle(el).transform)).not.toBe("none"); // the card is being pulled
 });

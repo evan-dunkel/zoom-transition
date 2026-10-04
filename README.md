@@ -247,6 +247,15 @@ npm test               # Playwright: builds the demo and harness, serves them, r
   since the source it flies from usually has none.
 - Corner radii (plain px, on the source and on the hero or their first child) blend from
   one end's to the other's in flight, in on-screen pixels, rather than scaling with the copy.
+  A crop (e.g. a square thumbnail opening into a wide image) happens inside the flight with
+  rounded corners; the hero's shadow wraps the visible shape and is never cut by it.
+- Corner smoothing: cards take `corner-shape` from `--zoom-corner-shape`; flights copy the
+  hero's. To match Figma's iOS-style 60% smoothing, scale each Figma radius by 1.23 and use
+  `corner-shape: superellipse(1.36)` where supported (`@supports (corner-shape: superellipse(2))`),
+  falling back to the plain Figma radius elsewhere (fitted numerically; see the standalone styles).
+- Focus: opening moves focus into the card (the close button for keyboard users, the card
+  itself after a tap or click, so touch screens don't draw a ring); closing returns it to
+  the source for keyboard users and leaves nothing focused otherwise.
 - If source and hero have different aspect ratios, the copy is cropped to the
   source and opens out to the hero, so nothing stretches.
 - Every item in a group is rendered as a card while open. For very large

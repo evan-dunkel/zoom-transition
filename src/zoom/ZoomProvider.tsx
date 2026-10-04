@@ -500,6 +500,7 @@ const ZoomCard = memo(function ZoomCard({
       data-zoom-id={id}
       aria-label={label}
       inert={!active && !layout.stream}
+      tabIndex={-1}
       style={{
         // In a stream, cards sit in the column's own flow at their content's height.
         ...(layout.stream
@@ -598,6 +599,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     flyVisible: false,
     /** groupOpacity: the index of the item whose source is hidden on the page. */
     hiddenAt: 0,
+    /** The last input was the keyboard (not a pointer): decides where focus goes. */
+    keyboard: false,
   }).current;
 
   // The shared zoom: the whole pager (card, metadata, neighbours) scales together.
@@ -1350,9 +1353,21 @@ export function ZoomProvider(props: ZoomProviderProps) {
     gesturesRef.current?.refresh();
     prefreezeStaticHeroes();
     updateDerived();
-    const card = cardEls.current.get(S.ids[S.index]);
-    card?.querySelector<HTMLElement>("[data-zoom-close]")?.focus({ preventScroll: true });
+    focusCard(S.index);
   };
+
+  /**
+   * Focus moves into the open card, so the dialog is where assistive tech and the
+   * keyboard are. Keyboard users land on the close button. After a tap or click the
+   * card itself takes focus instead: a focused button shows its ring on touch screens
+   * (iOS Safari draws it for programmatic focus), which reads as a glitch.
+   */
+  function focusCard(index: number) {
+    const card = cardEls.current.get(S.ids[index]);
+    if (!card) return;
+    const target = S.keyboard ? card.querySelector<HTMLElement>("[data-zoom-close]") ?? card : card;
+    target.focus({ preventScroll: true });
+  }
 
   /* -------------------------------------------------------------- paging */
 
@@ -1382,7 +1397,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     gesturesRef.current?.refresh();
     if (!S.refocus || S.phase !== "open") return;
     S.refocus = false;
-    cardEls.current.get(S.ids[index])?.querySelector<HTMLElement>("[data-zoom-close]")?.focus({ preventScroll: true });
+    focusCard(index);
   }, [index]);
 
   // Also while opening: the cards and the flying hero slide over without restarting.
@@ -1766,8 +1781,15 @@ export function ZoomProvider(props: ZoomProviderProps) {
     zoomOpacity.jump(1);
     dimOpacity.jump(0);
     setSession(null);
-    const focusable = focusTarget?.closest<HTMLElement>("button, a[href], [tabindex]") ?? focusTarget;
-    focusable?.focus({ preventScroll: true });
+    // Keyboard users get focus back on what they opened. After a tap or click nothing
+    // keeps focus: returning it would draw a ring around the tile on touch screens.
+    if (S.keyboard) {
+      const focusable = focusTarget?.closest<HTMLElement>("button, a[href], [tabindex]") ?? focusTarget;
+      focusable?.focus({ preventScroll: true });
+    } else {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body && (rootRef.current?.contains(active) || focusTarget?.contains(active) || active.contains(focusTarget))) active.blur();
+    }
   };
 
   /* -------------------------------------------------------------- wiring */
@@ -1826,6 +1848,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
     gesturesRef.current = gestures;
     window.addEventListener("keydown", onKey);
+    // How the person is getting around, for where focus goes (see focusCard).
+    const onKeyInput = () => (S.keyboard = true);
+    const onPointerInput = () => (S.keyboard = false);
+    window.addEventListener("keydown", onKeyInput, true);
+    window.addEventListener("pointerdown", onPointerInput, true);
     // Scrolling during a transition:
     // - inside a card while its hero is still flying in: the flight follows (see startFlight);
     // - the page while cards are flying home: their sources moved, so re-aim them,
@@ -1889,6 +1916,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     return () => {
       gestures.detach();
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKeyInput, true);
+      window.removeEventListener("pointerdown", onPointerInput, true);
       window.removeEventListener("popstate", onPop);
       document.removeEventListener("scroll", onAnyScroll, { capture: true });
       cancelAnimationFrame(reaim);

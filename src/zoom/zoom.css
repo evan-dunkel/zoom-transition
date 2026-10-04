@@ -31,6 +31,7 @@
   transform-origin: 0 0;
   overflow: hidden;
   border-radius: var(--zoom-card-radius, 28px);
+  corner-shape: var(--zoom-corner-shape, round); /* e.g. superellipse(1.36) for smoothed corners */
   color: var(--zoom-card-color, inherit);
 }
 .zoom-card-scroll {
@@ -58,7 +59,10 @@
   align-items: center;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  /* No sideways rubber-band: a sideways swipe is the card's to pull, and a bounce first
+     showed as a jump before the pull took over. */
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
   scrollbar-width: none;
 }
 .zoom-stream::-webkit-scrollbar { display: none; }
@@ -86,6 +90,8 @@
   cursor: pointer;
 }
 .zoom-close::before { content: ""; position: absolute; inset: -7px; } /* 44px hit area */
+/* The card takes focus (so the dialog has it) without drawing a ring of its own. */
+.zoom-card:focus { outline: none; }
 .zoom-close:focus-visible { outline: 2px solid var(--zoom-focus, currentColor); outline-offset: 2px; }
 
 .zoom-flight { position: absolute; inset: 0; pointer-events: none; }
@@ -103,6 +109,7 @@
   min-height: 100%;
   overflow: clip; /* keep the content inside the rounded corners when it bounces */
   border-radius: var(--zoom-card-radius, 28px);
+  corner-shape: var(--zoom-corner-shape, round); /* e.g. superellipse(1.36) for smoothed corners */
   background: var(--zoom-card-bg, #fff);
 }
 /* A zero-height sticky bar at the top of the content: the close button stays put

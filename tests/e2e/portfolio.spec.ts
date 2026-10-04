@@ -166,7 +166,8 @@ test("writing is its own stream, and the last piece offers the way back", async 
   await page.locator(STREAM).evaluate((el) => (el.scrollTop = el.scrollHeight));
   await page.locator(".zoom-card").last().locator(".pf-back").click();
   await expect.poll(() => phase(page)).toBe("idle");
-  await expect(page.locator(".pf-row").last()).toBeFocused();
+  // Closed with a click: nothing is left focused (no ring around the row on touch screens).
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 });
 
 test("Back closes", async ({ page }) => {

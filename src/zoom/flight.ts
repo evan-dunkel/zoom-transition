@@ -32,6 +32,8 @@ export type HeroMetrics = {
   shadowRadius: string;
   /** The hero element's own corner radius (px), for blending corners in flight. */
   ownRadius: number;
+  /** The hero's corner-shape (e.g. "superellipse(1.36)"), or "" where unsupported. */
+  cornerShape: string;
 };
 
 /** Far enough outside the copy's box that nothing a hero paints reaches it. */
@@ -47,6 +49,7 @@ export function measureHero(hero: HTMLElement): HeroMetrics {
     shadow: cs.boxShadow,
     shadowRadius: cs.borderRadius,
     ownRadius: radiusOf(hero, cs),
+    cornerShape: cs.getPropertyValue("corner-top-left-shape"),
   };
 }
 
@@ -125,7 +128,7 @@ export function createFlight(
     radii?: { from: number; to: number };
   } = {},
 ): Flight {
-  const { W0, H0, radius, shadow, shadowRadius } = opts.metrics ?? measureHero(hero);
+  const { W0, H0, radius, shadow, shadowRadius, cornerShape } = opts.metrics ?? measureHero(hero);
   const fit = (r: Rect): Fit => {
     const s = Math.max(r.w / W0, r.h / H0);
     return {
@@ -157,26 +160,42 @@ export function createFlight(
   copy.removeAttribute("data-zoom-hero");
   copy.style.visibility = "visible";
   copy.style.margin = "0";
+  copy.style.position = "absolute";
+  copy.style.left = "0";
+  copy.style.top = "0";
   copy.style.width = `${W0}px`;
   copy.style.height = `${H0}px`;
-  // The hero's own shadow is drawn on a layer of its own, behind the copy, so it can fade.
+  // A window over the copy. Normally it's the whole box and clips nothing (so a cover
+  // swung open in 3D, or a glow, can overhang). When the copy is cropped to the
+  // source's shape (a square thumbnail opening into a wide image) the window shrinks
+  // to the visible part and clips there, with its own rounded (and shaped) corners.
+  // The crop used to be a clip-path on the whole flight, which also cut the shadow and
+  // left the cropped corners square.
+  const win = document.createElement("div");
+  win.className = "zoom-clone-window";
+  win.style.cssText = "position:absolute;inset:0;";
+  if (cornerShape) win.style.setProperty("corner-shape", cornerShape);
+  // The hero's own shadow is drawn on a layer of its own, behind the window, so it can
+  // fade, and so it wraps the visible (cropped) shape rather than being cut by it.
   let shade: HTMLElement | null = null;
   if (shadow && shadow !== "none") {
     shade = document.createElement("div");
     shade.className = "zoom-clone-shadow";
     shade.style.cssText = `position:absolute;inset:0;border-radius:${shadowRadius};box-shadow:${shadow};pointer-events:none;`;
+    if (cornerShape) shade.style.setProperty("corner-shape", cornerShape);
     el.appendChild(shade);
     copy.style.boxShadow = "none";
   }
-  el.appendChild(copy);
+  el.appendChild(win);
+  win.appendChild(copy);
   // Live heroes get a host for their own React content. Until that content has
   // rendered (usually the same frame), the snapshot underneath stands in.
   let liveHost: HTMLElement | null = null;
   if (opts.live) {
     liveHost = document.createElement("div");
     liveHost.className = ["zoom-live", opts.live.className].filter(Boolean).join(" ");
-    liveHost.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;margin:0;${shade ? "box-shadow:none;" : ""}`;
-    el.appendChild(liveHost);
+    liveHost.style.cssText = `position:absolute;left:0;top:0;width:${W0}px;height:${H0}px;margin:0;${shade ? "box-shadow:none;" : ""}`;
+    win.appendChild(liveHost);
   }
   layer.appendChild(el);
 
@@ -202,27 +221,34 @@ export function createFlight(
       const value = `${r}px`;
       copy.style.borderRadius = value;
       if (liveHost) liveHost.style.borderRadius = value;
-      if (shade) shade.style.borderRadius = value;
     }
-    if (shade) shade.style.opacity = String(clamp(opts.shadowOpacity ? opts.shadowOpacity() : 1, 0, 1));
-    // Clip only the sides that are meant to be clipped. A clip-path also cuts
-    // anything the hero paints outside its own box (a shadow, a cover swung open
-    // in 3D, a glow), so every side that isn't being cropped is pushed far out
-    // (negative inset) instead of sitting on the box edge.
-    const cropX = ix > 0.5;
-    const cropY = iy > 0.5;
-    let it = cropY ? iy : -OUTSIDE;
-    let ib = cropY ? iy : -OUTSIDE;
+    // Crop: shrink the window to the visible part (see above).
+    const cropping = ix > 0.5 || iy > 0.5;
+    const offX = cropping ? ix : 0;
+    const offY = cropping ? iy : 0;
+    const inset = `${offY}px ${offX}px`;
+    win.style.inset = inset;
+    win.style.overflow = cropping ? "hidden" : "";
+    win.style.borderRadius = cropping ? `${r}px` : "";
+    copy.style.left = `${-offX}px`;
+    copy.style.top = `${-offY}px`;
+    if (liveHost) {
+      liveHost.style.left = `${-offX}px`;
+      liveHost.style.top = `${-offY}px`;
+    }
+    if (shade) {
+      shade.style.inset = inset;
+      if (corners || cropping) shade.style.borderRadius = `${r}px`;
+      shade.style.opacity = String(clamp(opts.shadowOpacity ? opts.shadowOpacity() : 1, 0, 1));
+    }
+    // Following scrolled content: cut everything (shadow included) at the card's top
+    // and bottom edges. The sides are pushed far out so nothing is cut there.
     const band = opts.clip ? opts.clip() : null;
     if (band && sv > 0) {
-      it = Math.max(it, (band.top - top) / sv);
-      ib = Math.max(ib, (top + H0 * sv - band.bottom) / sv);
-    }
-    const ixs = cropX ? ix : -OUTSIDE;
-    el.style.clipPath =
-      cropX || it > -OUTSIDE || ib > -OUTSIDE
-        ? `inset(${it}px ${ixs}px ${ib}px ${ixs}px${cropX || cropY ? ` round ${r}px` : ""})`
-        : "";
+      const bt = Math.max(-OUTSIDE, (band.top - top) / sv);
+      const bb = Math.max(-OUTSIDE, (top + H0 * sv - band.bottom) / sv);
+      el.style.clipPath = `inset(${bt}px ${-OUTSIDE}px ${bb}px ${-OUTSIDE}px)`;
+    } else el.style.clipPath = "";
   };
   // Three values change each frame; write the style once, in Motion's render step.
   let scheduled = false;
