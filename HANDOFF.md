@@ -225,7 +225,12 @@ behind is live and a tap can reopen).
   close the page can scroll again (see releaseScroll); the overlay then moves with it, so
   `watchPage`/`followPage` measure the source relative to the overlay, not the screen.
   At scroll 0 nothing of the page is above it, so the strip under the status bar shows the
-  page's background rather than the dim.
+  page's background rather than the dim. The overhang below is only as much page as there
+  is under the viewport (up to 30vh; `placeOnPage` measures it with the root clipped and
+  sets `--zoom-overscan`): Safari counted a longer overhang as page height, so near the
+  page's end a reader could scroll into it during a close (scrolling is released then) and
+  the page snapped back once the overlay closed. At the very end there's no page under the
+  toolbar, so the page's own end shows there.
 - `lockScroll`/`unlockScroll`: `overflow: hidden` on `<html>`, plus
   `scrollbar-gutter: stable` when scrollbars take up space, so the page (and the
   sources cards land on) don't shift sideways. Previous inline styles are restored.

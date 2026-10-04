@@ -38,9 +38,12 @@
    viewport (--zoom-overscan) so the open cards show through the toolbar. Sideways it
    clips, so a pager's off-screen cards don't widen the page; closed, it clips everything
    so it never adds to the page's height. */
-.zoom-root.zoom-page { z-index: 1000; --zoom-overscan: 30vh; }
+.zoom-root.zoom-page { z-index: 1000; --zoom-overscan: 0px; }
 .zoom-root.zoom-page[data-open] { overflow-x: clip; overflow-y: visible; }
-.zoom-page > :is(.zoom-dim, .zoom-backdrop) { top: calc(-1 * var(--zoom-overscan)); bottom: calc(-1 * var(--zoom-overscan)); }
+/* Above, the page can't scroll past its top, so the overhang is free; below, it's only as
+   much page as there is (set from script, up to 30vh), so the open overlay never makes the
+   page taller: Safari would let it scroll into the overhang, then snap back on close. */
+.zoom-page > :is(.zoom-dim, .zoom-backdrop) { top: -30vh; bottom: calc(-1 * var(--zoom-overscan)); }
 .zoom-page .zoom-stream { bottom: calc(-1 * var(--zoom-overscan)); }
 .zoom-root[data-open] { visibility: visible; pointer-events: auto; }
 /* While closing, the page behind is live again (tap a source to turn the close

@@ -1248,6 +1248,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const r = root.getBoundingClientRect();
     root.style.left = `${-r.left}px`;
     root.style.top = `${-r.top}px`;
+    // The overhang below (under a phone's toolbar): as much page as there is below the
+    // viewport, up to 30vh, measured with the overlay's own overhang clipped away.
+    const scroller = document.scrollingElement ?? html;
+    root.style.overflow = "clip";
+    const below = scroller.scrollHeight - (scroller.scrollTop + html.clientHeight);
+    root.style.overflow = "";
+    root.style.setProperty("--zoom-overscan", `${Math.max(0, Math.min(below, innerHeight * 0.3))}px`);
   };
 
   // Over the whole page, the page behind stops scrolling while open. Where scrollbars

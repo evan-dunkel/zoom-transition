@@ -260,3 +260,37 @@ test('revealSource "read": the page behind follows the piece being read, so the 
   await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
   expect(await page.evaluate(() => scrollY)).toBe(scrolled); // …so the close didn't scroll
 });
+
+// Near the page's end a source can't be centred: the page only scrolls as far as its own
+// content (not the open overlay's overhang under a phone's toolbar), so nothing jumps
+// back once the overlay closes.
+for (const id of ["about", "case-studies"]) {
+  test(`closing on ${id}, near the page's end, scrolls only as far as the page goes, with no jump at landing`, async ({ page }) => {
+    await page.goto("/dist/portfolio-icons.html");
+    const [max, height] = await page.evaluate(() => [document.documentElement.scrollHeight - innerHeight, document.documentElement.scrollHeight]);
+    await page.locator(".tile").nth(0).click();
+    await expect.poll(() => phase(page)).toBe("open");
+    await page.locator(".zoom-stream").evaluate((el, id) => {
+      el.scrollTop = document.querySelector<HTMLElement>(`.zoom-card[data-zoom-id="${id}"]`)!.offsetTop - 8;
+    }, id);
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#${id}`);
+    await page.evaluate(() => {
+      const seen: number[] = [];
+      (window as any).__y = seen;
+      const tick = () => {
+        seen.push(scrollY);
+        (window as any).__h = Math.max((window as any).__h ?? 0, document.documentElement.scrollHeight);
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+    await page.keyboard.press("Escape");
+    await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+    await page.waitForTimeout(200);
+    const ys: number[] = await page.evaluate(() => (window as any).__y);
+    const moved = ys.filter((y, i) => i > 0 && y !== ys[i - 1]);
+    expect(await page.evaluate(() => (window as any).__h)).toBeLessThanOrEqual(height + 1); // the page never grows…
+    expect(Math.max(...ys)).toBeLessThanOrEqual(max + 1); // …nor scrolls past its end…
+    expect(moved.length).toBeLessThanOrEqual(1); // …one scroll, at the start, and no jump back
+  });
+}
