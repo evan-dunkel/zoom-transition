@@ -479,6 +479,14 @@ See README for details.
   the viewport's top, title 8px down, column unscrolled, open done in under 1.5s), so the
   title sat under the viewer's header only at scroll 0. Viewer chrome, not the library;
   a site without the viewer doesn't have it.
+- Follow-up from the phone: on the first close the card landed too low, then jumped up.
+  The scroll lock was released only after landing; whatever that set off (the viewer
+  re-laying out the page by 70px) moved the source after the card had landed. The page
+  now scrolls again as the close starts (`releaseScroll`; the scrollbar gutter stays
+  reserved until the end; a close turned back into an open relocks), and a viewport
+  resize mid-close re-aims the cards like a page scroll does (`reaimSoon`). Guarded by
+  "if the page moves mid-close ... the card still lands on its source" (flight-invariants;
+  70px off without the re-aim). Diagnostics log each close frame by frame.
 - Close buttons: the button sits on the hero's corner, under the hero's flying copy, so
   any fade during a flight is hidden and it popped in at landing. zoom.css hides it while
   `data-phase` is opening/closing and fades it in once landed (`--zoom-close-fade`, 200ms);

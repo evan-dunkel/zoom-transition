@@ -1202,6 +1202,20 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (scrollbar > 0) html.style.scrollbarGutter = "stable";
     html.style.overflow = "hidden";
   };
+  /**
+   * Closing: the page scrolls again as soon as the close starts, not once it's done, so
+   * whatever that sets off (a host re-laying out the page, the browser's own toolbars)
+   * moves the sources early, while the cards can still re-aim at them (see onAnyScroll
+   * and the resize listener), instead of after they've landed. The scrollbar gutter stays
+   * reserved until the end, so the page doesn't reflow sideways under the landing cards.
+   */
+  const releaseScroll = () => {
+    if (S.scrollLock) document.documentElement.style.overflow = S.scrollLock.overflow;
+  };
+  /** A close turned back into an open: lock again. */
+  const relockScroll = () => {
+    if (S.scrollLock) document.documentElement.style.overflow = "hidden";
+  };
   const unlockScroll = () => {
     if (!S.scrollLock) return;
     const html = document.documentElement;
@@ -1844,6 +1858,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     setPhase("closing");
     emitAll("closing", interrupted);
     setBackgroundInert(false); // so tapping a source can turn the close around
+    releaseScroll();
     const gen = ++S.gen;
 
     if (S.reduced) {
@@ -1893,6 +1908,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (j < 0) return;
     setPhase("opening");
     setBackgroundInert(true);
+    relockScroll();
     if (j !== S.index) setIndex(j);
     pushEntry(id);
     emitAll("opening", true);
@@ -2021,14 +2037,20 @@ export function ZoomProvider(props: ZoomProviderProps) {
         it.flightScrollNow = scrollerOf(it.id)?.scrollTop ?? it.flightScrollNow;
         it.flight.invalidate();
       });
-      if (S.phase !== "closing" || S.mode !== "cards" || S.reduced) return;
       if (e.target instanceof Node && root.contains(e.target)) return;
-      if (reaim) return;
+      reaimSoon();
+    };
+    const reaimSoon = () => {
+      if (S.phase !== "closing" || S.mode !== "cards" || S.reduced || reaim) return;
       reaim = requestAnimationFrame(() => {
         reaim = 0;
         if (S.phase === "closing" && S.mode === "cards") transitionCards("sources", S.index);
       });
     };
+    // The viewport changing size mid-close (a host re-laying out the page, toolbars
+    // showing) moves the sources too.
+    window.addEventListener("resize", reaimSoon);
+    window.visualViewport?.addEventListener("resize", reaimSoon);
     document.addEventListener("scroll", onAnyScroll, { capture: true, passive: true });
     // Back and Forward.
     const onPop = (e: PopStateEvent) => {
@@ -2075,6 +2097,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
       window.removeEventListener("keydown", onKeyInput, true);
       window.removeEventListener("pointerdown", onPointerInput, true);
       window.removeEventListener("popstate", onPop);
+      window.removeEventListener("resize", reaimSoon);
+      window.visualViewport?.removeEventListener("resize", reaimSoon);
       document.removeEventListener("scroll", onAnyScroll, { capture: true });
       cancelAnimationFrame(reaim);
       ro.disconnect();

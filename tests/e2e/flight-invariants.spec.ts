@@ -138,3 +138,33 @@ test("a backdrop filter is at full strength when open, however light the dim", a
   await expect.poll(() => phase(page)).toBe("idle");
   expect(await page.evaluate(() => Number(getComputedStyle(document.querySelector(".zoom-backdrop")!).opacity))).toBe(0);
 });
+
+test("if the page moves mid-close (a host re-laying it out), the card still lands on its source", async ({ page }) => {
+  await page.click('[data-zoom-source="a"]');
+  await expect.poll(() => phase(page)).toBe("open");
+  await page.evaluate(() => {
+    const root = document.querySelector<HTMLElement>(".zoom-root")!;
+    const frames: number[] = [];
+    (window as any).__landing = frames;
+    // Shortly into the close, the page shifts down 70px and the viewport reports a resize,
+    // as the claude.ai viewer does when a page's scrolling changes.
+    new MutationObserver(() => {
+      if (root.dataset.phase !== "closing") return;
+      setTimeout(() => {
+        document.querySelector<HTMLElement>("main")!.style.paddingTop = "94px";
+        dispatchEvent(new Event("resize"));
+      }, 60);
+    }).observe(root, { attributes: true, attributeFilter: ["data-phase"] });
+    const tick = () => {
+      const clone = document.querySelector(".zoom-clone-window");
+      if (clone) frames.push(clone.getBoundingClientRect().top);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page)).toBe("idle");
+  const frames: number[] = await page.evaluate(() => (window as any).__landing);
+  const tile = await page.locator('[data-zoom-source="a"]').evaluate((el) => el.getBoundingClientRect().top);
+  expect(Math.abs(frames[frames.length - 1] - tile)).toBeLessThan(2); // lands where the tile is now
+});
