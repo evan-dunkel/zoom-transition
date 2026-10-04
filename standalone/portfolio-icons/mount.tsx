@@ -26,6 +26,8 @@ export function mountPortfolio(props: Partial<ZoomProviderProps> = {}) {
       getLabel={(id) => document.querySelector(`template[data-zoom-destination="${id}"] h2`)?.textContent ?? id}
       // Development: ?slow=5 plays every transition 5x slower (for inspecting frames).
       timeScale={1 / (Number(new URLSearchParams(location.search).get("slow")) || 1)}
+      // When the page behind follows the piece being read (?reveal=read|close|off to try them).
+      revealSource={({ read: "read", off: false } as const)[new URLSearchParams(location.search).get("reveal") as "read" | "off"] ?? "close"}
       {...props}
     />,
   );

@@ -281,6 +281,17 @@ cards in the track (`[data-zoom-section-title]`).
   rAF lost the race to the sources now and then. A `hashchange` within the page opens with
   the normal flight and adopts the browser's entry (`fromPop` while opening, depth 1).
 
+- Scroll restoration: the browser restores the scroll position saved with the entry it
+  goes Back to, which undid the close's scroll to the source (the reader ended at the top
+  of the page and the card flew off screen below). `scrollRestoration` belongs to each
+  entry and a pushed entry inherits it, so `holdScroll` sets it to manual on the page's
+  entry before the first push and `releaseRestoration` (closeDone) puts it back.
+  Setting it just before our own `history.go(-n)` didn't work: that changes the entry
+  being left, not the one landed on.
+- `revealSource` (`"close"` default, `"read"`, false): `revealSource(el)` scrolls the source
+  into view centred when it's out of view, then `placeOnPage()` (over the whole page the
+  overlay just scrolled away with the page). "read" calls it from `setIndex` while open.
+
 ### Gestures (`gestures.ts`)
 - Touch uses touch events (decide axis on first move so native scroll and
   dismiss can coexist); mouse uses pointer events. Motion's drag can't do this.

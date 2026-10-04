@@ -214,6 +214,16 @@ export type ZoomProviderProps = {
    * name in an h2.zoom-stream-title; style that like the page's own section titles.
    */
   renderSectionTitle?: (section: string) => ReactNode;
+  /**
+   * Keeping the page behind on the piece being read, so a close lands where the reader
+   * is, not where they started. The source is scrolled into view, centred, only when it's
+   * out of view:
+   * - "close" (default): the moment a close starts.
+   * - "read": each time the visible piece changes while open, so nothing moves at close.
+   *   For a backdrop the page can't be seen through (opaque, or heavily blurred).
+   * - false: never.
+   */
+  revealSource?: "close" | "read" | false;
   /** Draw tuning aids: the wheel-dismiss edge zones in each card. */
   debug?: boolean;
   /** Accessible name for each destination card. */
@@ -615,6 +625,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     histDepth: 0,
     /** The next open is already open: the page loaded at an item's address. */
     instant: false,
+    /** The page's scrollRestoration, while our own Back is set to manual. */
+    restoration: null as ScrollRestoration | null,
     /** The item the page's address named when it loaded, until its source registers. */
     addressed: null as string | null,
     /** popstate events caused by our own history.go(), to be ignored. */
@@ -800,7 +812,25 @@ export function ZoomProvider(props: ZoomProviderProps) {
       return;
     }
     S.histDepth += 1;
+    holdScroll();
     window.history.pushState({ zoom: id, depth: S.histDepth }, "", urlFor(id));
+  };
+  /**
+   * Going Back to the page (ours on close, or the browser's), the browser would restore
+   * the scroll position it saved for the page's entry, where the reader opened from,
+   * undoing the scroll to the source the close makes. The setting belongs to each entry
+   * (a pushed one inherits it), so it's set to manual on the page's entry before the first
+   * push, and put back once the close has landed.
+   */
+  const holdScroll = () => {
+    if (S.restoration !== null) return;
+    S.restoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+  };
+  const releaseRestoration = () => {
+    if (S.restoration === null || (window.history.state && typeof window.history.state === "object" && "zoom" in window.history.state)) return;
+    window.history.scrollRestoration = S.restoration;
+    S.restoration = null;
   };
   /**
    * The visible item changed: a new entry ("item" mode) or just a new address ("session"
@@ -1585,6 +1615,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
     S.index = i;
     if (previous !== i && (S.phase === "open" || S.phase === "opening")) {
       recordPage(S.ids[i], quiet);
+      // revealSource "read": the page behind follows the piece being read.
+      const el = latest.current.revealSource === "read" && S.phase === "open" ? sources.current.get(S.ids[i])?.el : null;
+      if (el) revealSource(el);
       const prevId = S.ids[previous];
       if (prevId) emit(getItem(prevId, previous), "deactivated");
       emit(getItem(S.ids[i], i), "activated");
@@ -1914,11 +1947,15 @@ export function ZoomProvider(props: ZoomProviderProps) {
       hidden = r.left < left - 0.5 || r.top < top - 0.5 || r.right > left + p.clientWidth + 0.5 || r.bottom > top + p.clientHeight + 0.5;
     }
     if (!hidden) return false;
+    // Centred, so the card lands mid-screen with its neighbours around it.
     try {
-      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" as ScrollBehavior });
+      el.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" as ScrollBehavior });
     } catch {
-      el.scrollIntoView({ block: "nearest", inline: "nearest" }); // older Safari has no "instant"
+      el.scrollIntoView({ block: "center", inline: "nearest" }); // older Safari has no "instant"
     }
+    // Over the whole page the overlay is part of the page and just scrolled away with it:
+    // back over the viewport (the cards, placed within it, stay where they are on screen).
+    placeOnPage();
     return true;
   };
 
@@ -1987,7 +2024,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     // Read (and scroll, if needed) before writing anything, so the browser only
     // recalculates styles once at the moment of release.
     const active = sources.current.get(S.ids[S.index]);
-    const scrolled = !S.reduced && active ? revealSource(active.el) : false;
+    const scrolled = !S.reduced && active && latest.current.revealSource !== false ? revealSource(active.el) : false;
     showHiddenSourceFor(S.index); // the visible item's place on the page, ready for it
     setPhase("closing");
     startFlightButton();
@@ -2063,6 +2100,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const closeDone = () => {
     endFlightButton();
+    releaseRestoration();
     presence.current.forEach((mv) => mv.jump(1)); // before the group is unmarked below
     S.ids.forEach((id, j) => {
       const it = getItem(id, j);

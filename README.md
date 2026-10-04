@@ -258,6 +258,11 @@ React island, or keep the markup in Astro and use one small island with `scan`
   than `position: fixed`: iOS Safari clips fixed content at the viewport's edge and paints a
   solid band under its floating toolbar, while page content shows through it. Its dim,
   backdrop and stream run on past the viewport (`--zoom-overscan`) so open cards do too.
+- `revealSource` — keeps the page behind on the piece being read, so a close lands where the
+  reader is (like Photos: dismiss, and the grid is at the photo you were on). The source is
+  scrolled into view, centred, only when it's out of view. `"close"` (default): the moment a
+  close starts. `"read"`: each time the visible piece changes while open, so nothing moves at
+  close; for a backdrop the page can't be seen through. `false`: never.
 - `background` — element made `inert` while open.
 - Reduced motion is automatic: open and close become fades.
 

@@ -213,3 +213,50 @@ test("an address that isn't a piece is left alone", async ({ page }) => {
   expect(await phase(page)).toBe("idle");
   expect(await page.evaluate(() => location.hash)).toBe("#projects");
 });
+
+// Read on into a piece whose tile is off the page's screen, then close: the page scrolls
+// to that tile, centred, and the card lands on it in view.
+test("closing on a piece whose tile is out of view brings the tile into view, centred, and lands on it", async ({ page }) => {
+  await page.goto("/dist/portfolio-icons.html");
+  await page.locator(".tile").nth(0).click(); // at the top of the page
+  await expect.poll(() => phase(page)).toBe("open");
+  await page.locator(".zoom-stream").evaluate((el) => {
+    el.scrollTop = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="case-studies"]')!.offsetTop - 8;
+  });
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#case-studies");
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+  const tile = await page.locator('[data-zoom-source="case-studies"]').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, middle: (r.top + r.bottom) / 2, vh: innerHeight };
+  });
+  expect(tile.top).toBeGreaterThanOrEqual(0); // in view…
+  expect(tile.bottom).toBeLessThanOrEqual(tile.vh);
+  expect(Math.abs(tile.middle - tile.vh / 2)).toBeLessThan(tile.vh * 0.15); // …centred
+});
+
+test('revealSource "read": the page behind follows the piece being read, so the close moves nothing', async ({ page }) => {
+  await page.goto("/dist/portfolio-icons.html?reveal=read");
+  await page.locator(".tile").nth(0).click();
+  await expect.poll(() => phase(page)).toBe("open");
+  await page.locator(".zoom-stream").evaluate((el) => {
+    el.scrollTop = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="case-studies"]')!.offsetTop - 8;
+  });
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#case-studies");
+  // Already there while reading: the tile is centred behind the open card…
+  const middle = () =>
+    page.locator('[data-zoom-source="case-studies"]').evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return (r.top + r.bottom) / 2 - innerHeight / 2;
+    });
+  // (as near centre as the page can scroll: this tile is close to the page's end)
+  await expect.poll(async () => Math.abs(await middle())).toBeLessThan(page.viewportSize()!.height * 0.15);
+  const scrolled = await page.evaluate(() => scrollY);
+  expect(scrolled).toBeGreaterThan(300);
+  // …and the open card didn't move on screen when the page did.
+  const card = await page.locator('.zoom-card[data-zoom-id="case-studies"]').evaluate((el) => el.getBoundingClientRect().top);
+  expect(card).toBeCloseTo(8, 0);
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+  expect(await page.evaluate(() => scrollY)).toBe(scrolled); // …so the close didn't scroll
+});
