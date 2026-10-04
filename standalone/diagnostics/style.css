@@ -1,0 +1,7 @@
+/* A log panel over everything, for reading the zoom's state on a device. */
+.diag {
+  position: fixed; z-index: 2000; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom));
+  max-height: 44vh; overflow: auto; margin: 0; padding: 8px 10px; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.82); color: #9ef59e; font: 10px/1.35 ui-monospace, Menlo, monospace;
+  white-space: pre-wrap; pointer-events: none;
+}

@@ -24,6 +24,8 @@ export function mountPortfolio(props: Partial<ZoomProviderProps> = {}) {
       groupOpacity={0.35}
       history={{ mode: "session" }}
       getLabel={(id) => document.querySelector(`template[data-zoom-destination="${id}"] h2`)?.textContent ?? id}
+      // Development: ?slow=5 plays every transition 5x slower (for inspecting frames).
+      timeScale={1 / (Number(new URLSearchParams(location.search).get("slow")) || 1)}
       {...props}
     />,
   );

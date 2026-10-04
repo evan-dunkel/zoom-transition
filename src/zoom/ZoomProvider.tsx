@@ -270,6 +270,8 @@ type Item = {
   api: ItemApi;
   /** The card's scale when sitting on its source. */
   sLand: number;
+  /** Stream: how much of the close button its card's scrolling leaves visible (0 to 1). */
+  barScroll: number;
 };
 
 const defaultGeometry: ZoomGeometry = { side: 18, gap: 8, top: 24, bottom: 14, maxCardWidth: 720 };
@@ -577,6 +579,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const phaseMV = useMotionValue<Phase>("idle");
   const cardEls = useRef(new Map<string, HTMLElement>());
   const items = useRef(new Map<string, Item>());
+  /** Each card's close bar, looked up once (null: a custom close button without one). */
+  const closeBars = useRef(new WeakMap<HTMLElement, HTMLElement | null>()).current;
   const rootRef = useRef<HTMLDivElement>(null);
   const zoomerRef = useRef<HTMLDivElement>(null);
   const dimRef = useRef<HTMLDivElement>(null);
@@ -693,6 +697,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         landed: false,
         offOpacity: null,
         sLand: NaN,
+        barScroll: 1,
       };
       items.current.set(id, it);
       const self = it;
@@ -713,11 +718,37 @@ export function ZoomProvider(props: ZoomProviderProps) {
         },
       };
       cv.s.on("change", () => updateProgress(self));
-      cv.o.on("change", () => updateProgress(self));
+      cv.o.on("change", () => {
+        updateProgress(self);
+        writeBar(self);
+      });
+      it.progress.on("change", () => writeBar(self));
     }
     it.j = j;
     return it;
   };
+  /**
+   * The close button's opacity, written on its own bar: it fades with the flight (squared,
+   * like the other cards, so it arrives late in an open and leaves early in a close), with
+   * its card, and in a stream as its card scrolls away. Its own opacity rather than its
+   * card's alone: the bar is sticky, and Safari can draw a sticky layer without its
+   * ancestors' opacity. (Where the card's opacity does reach it, it leaves a little ahead.)
+   */
+  function writeBar(it: Item) {
+    const card = cardEls.current.get(it.id);
+    if (!card) return;
+    let bar = closeBars.get(card);
+    if (bar === undefined) {
+      bar = card.querySelector<HTMLElement>(".zoom-close-bar");
+      closeBars.set(card, bar);
+    }
+    if (!bar) return;
+    const progress = it.progress.get();
+    const p = Number.isFinite(progress) ? clamp(progress, 0, 1) : 1;
+    const o = it.barScroll * p * p * clamp(it.cv.o.get(), 0, 1);
+    bar.style.opacity = o >= 0.999 ? "" : String(o);
+    bar.style.pointerEvents = o < 0.5 ? "none" : "";
+  }
   const resetItem = (it: Item) => {
     it.values.forEach((v) => v.mv.jump(v.initial));
     endFlight(it);
@@ -726,6 +757,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     it.offOpacity = null;
     it.landed = false;
     it.sLand = NaN;
+    it.barScroll = 1;
     it.cv.x.jump(0);
     it.cv.y.jump(0);
     it.cv.s.jump(1);
@@ -1337,11 +1369,11 @@ export function ZoomProvider(props: ZoomProviderProps) {
         if (!card || !bar || !button) return null;
         return { bar, room: card.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom };
       });
-      reads.forEach((r) => {
+      reads.forEach((r, j) => {
         if (!r) return;
-        const o = clamp(r.room / CLOSE_FADE, 0, 1);
-        r.bar.style.opacity = o >= 1 ? "" : String(o);
-        r.bar.style.pointerEvents = o < 0.5 ? "none" : "";
+        const it = getItem(S.ids[j], j);
+        it.barScroll = clamp(r.room / CLOSE_FADE, 0, 1);
+        writeBar(it);
       });
     };
     const pick = () => {

@@ -466,9 +466,15 @@ See README for details.
   environment): the fix follows the copy's structure. Guarded on every prototype by
   "heroes with a shadow don't clip their own overflow" (standalone-portfolio.spec.ts),
   and the inner-corner tween by harness project C in flight-invariants.spec.ts.
-- The same report's "first open is cut off": measured identical in Chromium on first open
-  and reopen (title 8px from the overlay's top). The claude.ai artifact viewer's
-  translucent header covered the top of the page on the first open; not our layout.
+- The same report's "first open is cut off" reproduced on the phone (screen recording):
+  the first open after load lands offset; a reopen is right. Not reproduced in WebKitGTK
+  (installed from Ubuntu's archive: `webkit2gtk-driver`, `xvfb`; driven with Selenium over
+  WebKitWebDriver, since Playwright's WebKit download host is blocked), with cold caches,
+  or with long tasks injected into the first frames. The first-open screenshot showed the
+  flying copy still up, so that open hadn't finished. `standalone/diagnostics` logs the
+  zoom's state after each tap for reading on the device. Open.
+- Close buttons fade with the flight (`writeBar`: scroll fade × progress² × card opacity,
+  on the bar itself; sticky layers can miss their ancestors' opacity in Safari).
 - `flight-invariants.spec.ts` guards what every layout inherits, on the plain harness
   (`test/scan.html`: a square 12px tile opening into a 16:9, 32px hero with a shadow): even
   crop, corner tween without a landing jump, shadow fading with the flight, focus by input

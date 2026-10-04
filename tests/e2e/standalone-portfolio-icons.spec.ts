@@ -118,3 +118,30 @@ test("a card's own close button sends that card home", async ({ page }) => {
   expect(await hiddenSource(page)).toEqual(["air-two"]);
   await expect.poll(() => phase(page)).toBe("idle");
 });
+
+test("the close button fades in with the open and out with the close, instead of riding the flight", async ({ page }) => {
+  await page.goto("/dist/portfolio-icons.html?slow=4");
+  const record = () =>
+    page.evaluate(() => {
+      const seen: number[] = [];
+      (window as any).__bar = seen;
+      const tick = () => {
+        const bar = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="air-one"] .zoom-close-bar');
+        if (bar && document.querySelector(".zoom-root")!.hasAttribute("data-open")) seen.push(bar.style.opacity === "" ? 1 : Number(bar.style.opacity));
+        requestAnimationFrame(tick);
+      };
+      tick();
+    });
+  const seen = () => page.evaluate(() => (window as any).__bar as number[]);
+  await record();
+  await page.locator(".tile").nth(0).click();
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("open");
+  const opening = await seen();
+  expect(opening.slice(0, 3).every((o) => o < 0.3)).toBe(true); // not there on take-off
+  expect(opening[opening.length - 1]).toBe(1); // fully there once open
+  await record();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+  const closing = await seen();
+  expect(Math.min(...closing.slice(-3))).toBeLessThan(0.1); // gone before it lands
+});

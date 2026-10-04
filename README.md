@@ -31,6 +31,8 @@ and closing sends every card back to its own source.
   in `mount.tsx`, so other prototypes can share them.
 - `standalone/portfolio-sections/` — the same content with each section opening as one
   continuous card, and switchable delineations between works (→ `dist/portfolio-sections.html`).
+- `standalone/diagnostics/` — the icon prototype with a log panel, for reading the zoom's
+  state on a real device (first open vs reopen).
   All are built by `standalone/build.py <folder>`, which inlines linked stylesheets, the
   script and SVG images, and `<!-- include path -->` directives (shared markup).
 - `astro-example/` — how it drops into an Astro portfolio
