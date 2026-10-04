@@ -190,9 +190,11 @@ React island, or keep the markup in Astro and use one small island with `scan`
   settles is `timing.page` (default 0.5 s, no bounce).
 - `layout` — `"pager"` (default) or `"stream"`. A stream lays a group's cards out as one
   continuous column, each card as tall as its content, scrolled natively like a document:
-  no paging, nothing to push through between pieces. The card under the top third of the
-  screen is the visible one (its source is the hidden one, and it's the one that flies
-  home). Close with the close button (it stays in view while reading), Escape, or by
+  no paging, nothing to push through between pieces. While reading, the card under the
+  top third of the screen is the visible one (its source is the hidden one). On close,
+  the piece you're looking at flies home: a card's own close button sends that card;
+  Escape, Back or a drag send the card whose image is most in view (visible area times
+  the share visible, so a whole icon beats a sliver of a large image). Close with the close button (it stays in view while reading), Escape, or by
   dragging sideways (scrolling sideways too, with `dismiss.wheelSideways`). Made for long
   reads (case studies, essays):
 

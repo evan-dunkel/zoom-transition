@@ -474,7 +474,7 @@ type ZoomCardProps = {
   renderDestination: (id: string) => ReactNode;
   closeButton: ZoomProviderProps["closeButton"];
   closeLabel: string;
-  close: () => void;
+  close: (id?: string) => void;
   /** Debug edge zones, when drawn. */
   zones: { slop: number; edges: DismissEdges } | null;
   makeContext: (id: string, j: number, active: boolean) => CardContextValue;
@@ -515,6 +515,7 @@ const ZoomCard = memo(function ZoomCard({
     [item, phase],
   );
   const ref = useCallback((el: HTMLElement | null) => setCardEl(id, el), [setCardEl, id]);
+  const closeThis = useCallback(() => close(id), [close, id]);
   const v = item.cv;
   return (
     <motion.article
@@ -550,7 +551,7 @@ const ZoomCard = memo(function ZoomCard({
               {/* Inside the scrolled content (and sticky), so it rides the
                   browser's overscroll bounce with the rest of the card. */}
               <div className="zoom-close-bar">
-                <CloseButton option={closeButton} label={closeLabel} close={close} />
+                <CloseButton option={closeButton} label={closeLabel} close={closeThis} />
               </div>
               {renderDestination(id)}
               {zones && <EdgeZones slop={zones.slop} edges={zones.edges} />}
@@ -1759,9 +1760,16 @@ export function ZoomProvider(props: ZoomProviderProps) {
   };
 
   /** Close from open, or turn an opening around. */
-  const close = useCallback((v?: ZoomVelocity, closeOpts: { towardTargetOnly?: boolean } = {}) => {
+  const close = useCallback((v?: ZoomVelocity, closeOpts: { towardTargetOnly?: boolean; id?: string } = {}) => {
     if (S.phase !== "open" && S.phase !== "opening") return;
     const interrupted = S.phase === "opening";
+    // Stream: send home the piece you're looking at. Its own close button names it;
+    // otherwise it's the card whose image is most in view, which can differ from the
+    // card under the top third (a tall piece's text above, the next one's image below).
+    if (S.L?.stream && S.phase === "open") {
+      const j = closeOpts.id !== undefined ? S.ids.indexOf(closeOpts.id) : dominantCard();
+      if (j >= 0 && j !== S.index) setIndex(j, true);
+    }
     leaveHistory();
     // Read (and scroll, if needed) before writing anything, so the browser only
     // recalculates styles once at the moment of release.
@@ -1784,6 +1792,34 @@ export function ZoomProvider(props: ZoomProviderProps) {
     if (scrolled) requestAnimationFrame(() => gen === S.gen && transitionCards("sources", S.index, v, closeOpts));
     else transitionCards("sources", S.index, v, closeOpts);
   }, []);
+
+  /**
+   * Stream: the card whose hero is most in view, or the visible card if no other's is.
+   * Scored by visible area times the share of the hero that's visible, so a whole icon
+   * beats a sliver of a large image, and most of a large image beats a whole icon.
+   */
+  const dominantCard = () => {
+    const view = streamRef.current?.getBoundingClientRect();
+    if (!view) return S.index;
+    const score = (id: string) => {
+      const hero = heroFor(id);
+      if (!hero) return 0;
+      const r = hero.getBoundingClientRect();
+      const area = r.width * r.height;
+      const w = Math.min(r.right, view.right) - Math.max(r.left, view.left);
+      const h = Math.min(r.bottom, view.bottom) - Math.max(r.top, view.top);
+      if (area <= 0 || w <= 0 || h <= 0) return 0;
+      return (w * h) ** 2 / area;
+    };
+    let best = S.index;
+    let bestScore = score(S.ids[S.index]);
+    S.ids.forEach((id, j) => {
+      if (j === S.index) return;
+      const s = score(id);
+      if (s > bestScore) [best, bestScore] = [j, s];
+    });
+    return best;
+  };
 
   /** Turn a close around: every card heads back to open, with `id` as the visible one. */
   const reopen = (id: string) => {
@@ -2028,7 +2064,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const api = useMemo(() => ({ open, close: () => close(), register, isOpen: !!session }), [open, close, register, session]);
 
   const closeLabel = props.closeLabel ?? "Close";
-  const closeFromUi = useCallback(() => close(), [close]);
+  /** From a card's own close button or context: that card goes home. */
+  const closeFromUi = useCallback((id?: string) => close(undefined, { id }), [close]);
   // Stable, so memoised cards keep their context until their own id/index/active changes.
   const cardContext = useCallback(
     (id: string, j: number, active: boolean): CardContextValue => ({
@@ -2043,7 +2080,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
         if (content) heroContent.current.set(id, content);
         else heroContent.current.delete(id);
       },
-      close: closeFromUi,
+      close: () => closeFromUi(id),
     }),
     [closeFromUi],
   );

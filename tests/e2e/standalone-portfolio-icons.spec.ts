@@ -90,3 +90,31 @@ test("closing from the stream sends the piece being read home, across sections a
   await expect.poll(() => phase(page)).toBe("idle");
   await expect(page.locator(".item").nth(3)).toBeFocused();
 });
+
+// One piece's text fills the top of the screen while the next piece's image is in view
+// below (reported from a phone): closing sends home the piece whose image you can see.
+const scrollToZoomIcon = (page: Page) =>
+  page.locator(".zoom-stream").evaluate((el) => {
+    el.scrollTop = document.querySelector<HTMLElement>('.zoom-card[data-zoom-id="zoom"]')!.offsetTop - 600;
+  });
+const reading = (page: Page) => page.evaluate(() => decodeURIComponent(location.hash.slice(1)));
+const hiddenSource = (page: Page) => page.locator("[data-zoom-hidden]").evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.zoomSource));
+
+test("closing sends home the piece whose image is in view, not the one whose text fills the top", async ({ page }) => {
+  await open(page, ".tile", 1);
+  await scrollToZoomIcon(page);
+  await expect.poll(() => reading(page)).toBe("air-two"); // its text is under the top third
+  await page.keyboard.press("Escape");
+  expect(await hiddenSource(page)).toEqual(["zoom"]); // the icon's place is emptied for it
+  await expect.poll(() => phase(page)).toBe("idle");
+  await expect(page.locator(".item").nth(0)).toBeFocused();
+});
+
+test("a card's own close button sends that card home", async ({ page }) => {
+  await open(page, ".tile", 1);
+  await scrollToZoomIcon(page);
+  await page.waitForTimeout(200);
+  await page.locator('.zoom-card[data-zoom-id="air-two"] [data-zoom-close]').click();
+  expect(await hiddenSource(page)).toEqual(["air-two"]);
+  await expect.poll(() => phase(page)).toBe("idle");
+});

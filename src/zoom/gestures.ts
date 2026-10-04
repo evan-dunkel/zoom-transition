@@ -58,7 +58,8 @@ export type GestureController = {
   page(direction: number): void;
   settlePage(i: number, velocity: number): void;
   /** velocity: of the shared zoom (x, y in px/s, s in scale/s) at the moment of release. */
-  close(velocity?: ZoomVelocity, opts?: { towardTargetOnly?: boolean }): void;
+  /** opts.id: the card to send home (its own close button); otherwise the provider picks. */
+  close(velocity?: ZoomVelocity, opts?: { towardTargetOnly?: boolean; id?: string }): void;
   /** Turn a close around, making `id` the visible card. */
   reopen(id: string): void;
   cancelDismiss(velocity: ZoomVelocity): void;
@@ -776,7 +777,8 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     }
     if (phase !== "open" && phase !== "opening") return;
     if (target.closest("[data-zoom-close]")) {
-      c.close();
+      // A close button closes its own card (in a stream, more than one can be in view).
+      c.close(undefined, { id: target.closest<HTMLElement>("[data-zoom-id]")?.dataset.zoomId });
       return;
     }
     if (c.layout().stream) {

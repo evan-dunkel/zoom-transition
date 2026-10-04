@@ -283,7 +283,13 @@ cards in the track (`[data-zoom-section-title]`).
   column so the card is at `top` (`scrollStreamTo`) and zooms from `slot(index)`.
   A scroll listener (once per frame, only while open) makes the card under the top
   third the visible one via `setIndex(i, quiet)`: no focus move or announcement, and
-  history replaces rather than pushes. `page(d)` scrolls instead (popstate). Flights
+  history replaces rather than pushes. `page(d)` scrolls instead (popstate).
+  On close (`close()`, phase open), the stream picks the card to send home first: the
+  close button's own card (`opts.id`, from gestures' click handler, the default
+  button's card or `ZoomCardContext.close`), else `dominantCard()`: the hero with the
+  highest visible area × visible share within the column, ties to the current card.
+  It becomes the index via `setIndex(j, true)` before anything else runs. A dismiss drag
+  moves the whole zoom, so changing the card at release doesn't jump. Flights
   following scroll use the column (`scrollerOf`); their clip is the column's band.
   Each card's sticky close bar fades over the last 64 px as its card's bottom edge
   reaches the button (set in the same per-frame scroll handler), instead of being cut
