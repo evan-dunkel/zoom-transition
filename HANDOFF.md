@@ -272,6 +272,15 @@ cards in the track (`[data-zoom-section-title]`).
   `pendingPush` defers pushes until our own Back lands. Default URL `#id`; on the
   portfolio use real paths (`/writing/slug`) so reload lands on the static page.
 
+- Addresses (default `#id` only; a custom `url` is the item's own page): on mount the
+  hash is kept as `S.addressed`; once that source registers (`register`, or the next frame
+  if it already has) `openAddressed` rewrites the entry to the plain page and opens with
+  `S.instant`: the open sequence skips the zoom and flight (still working out `S.s0` for
+  later drags and closes) and calls `openDone` in the same frame. `pushEntry` then adds the
+  `#id` entry, so Back closes. Waiting on registration rather than a fixed frame: a single
+  rAF lost the race to the sources now and then. A `hashchange` within the page opens with
+  the normal flight and adopts the browser's entry (`fromPop` while opening, depth 1).
+
 ### Gestures (`gestures.ts`)
 - Touch uses touch events (decide axis on first move so native scroll and
   dismiss can coexist); mouse uses pointer events. Motion's drag can't do this.

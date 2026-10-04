@@ -171,3 +171,45 @@ test("the close button rides above the flight, fading with it, and the real one 
   expect(Math.min(...closing)).toBeLessThan(0.3); // …fades out with it
   expect(await page.locator(".zoom-flight .zoom-close").count()).toBe(0); // and is gone
 });
+
+test("loading the page at a piece's address opens it, already open, and Back closes it onto the page", async ({ page }) => {
+  await page.goto("/dist/portfolio.html"); // an earlier page in the history
+  await page.addInitScript(() => {
+    // Record any flight, every frame: an address opens the piece in place, without one.
+    (window as any).__flew = false;
+    const tick = () => {
+      if (document.querySelector(".zoom-clone")) (window as any).__flew = true;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.goto("/dist/portfolio-icons.html#springs");
+  await expect.poll(() => phase(page), { timeout: 3000 }).toBe("open");
+  expect(await page.evaluate(() => (window as any).__flew)).toBe(false);
+  expect(await page.evaluate(() => location.hash)).toBe("#springs");
+  const top = await page.locator('.zoom-card[data-zoom-id="springs"]').evaluate((el) => el.getBoundingClientRect().top);
+  expect(top).toBeGreaterThanOrEqual(0); // the piece itself, at the top of the stream
+  expect(top).toBeLessThan(200);
+  await page.goBack();
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+  expect(await page.evaluate(() => [location.pathname.endsWith("portfolio-icons.html"), location.hash])).toEqual([true, ""]);
+});
+
+test("changing the address to a piece's within the page opens it, and Back closes it", async ({ page }) => {
+  await page.goto("/dist/portfolio-icons.html");
+  const before = await page.evaluate(() => history.length);
+  await page.evaluate(() => (location.hash = "springs")); // as typed into the address bar
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("open");
+  const entries = (await page.evaluate(() => history.length)) - before;
+  await page.goBack();
+  await expect.poll(() => phase(page), { timeout: 8000 }).toBe("idle");
+  expect(await page.evaluate(() => location.hash)).toBe("");
+  expect(entries).toBe(1); // the browser's entry for the piece, and no extra one of ours
+});
+
+test("an address that isn't a piece is left alone", async ({ page }) => {
+  await page.goto("/dist/portfolio-icons.html#projects"); // the section heading's own anchor
+  await page.waitForTimeout(300);
+  expect(await phase(page)).toBe("idle");
+  expect(await page.evaluate(() => location.hash)).toBe("#projects");
+});

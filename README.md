@@ -248,7 +248,10 @@ React island, or keep the markup in Astro and use one small island with `scan`
   like the books). `{ mode: "item" }`: every item visited adds an entry and Back
   steps back through them, then closes (for items that are places, like projects).
   `url: (id) => "/writing/" + id` gives each item a real address, so a reload or a
-  shared link lands on that item's own static page. Defaults to `#id`.
+  shared link lands on that item's own static page. Defaults to `#id`. With the default
+  addresses, a page loaded at `#id` opens with that item already open (no flight; Back
+  closes it onto the page), and changing the address to `#id` within the page opens it
+  as a tap would.
 - `container` — portal target; defaults to `document.body`, over the viewport (scroll is locked
   while open; where scrollbars take up space, their gutter is kept so the page doesn't shift).
   That overlay is part of the page, placed over the viewport at the scroll position, rather

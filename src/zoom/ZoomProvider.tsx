@@ -613,6 +613,10 @@ export function ZoomProvider(props: ZoomProviderProps) {
     refocus: false,
     /** History entries this provider has added on top of the page's own. */
     histDepth: 0,
+    /** The next open is already open: the page loaded at an item's address. */
+    instant: false,
+    /** The item the page's address named when it loaded, until its source registers. */
+    addressed: null as string | null,
     /** popstate events caused by our own history.go(), to be ignored. */
     ignorePops: 0,
     /** An entry to add once our own pending history.go() has landed. */
@@ -1130,6 +1134,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
 
   const register = useCallback((entry: SourceEntry) => {
     sources.current.set(entry.id, entry);
+    // The page loaded at this item's address: open it once its group has registered too.
+    if (entry.id === S.addressed) requestAnimationFrame(() => openAddressed.current());
     return () => {
       if (sources.current.get(entry.id)?.el === entry.el) sources.current.delete(entry.id);
     };
@@ -1306,11 +1312,66 @@ export function ZoomProvider(props: ZoomProviderProps) {
     pushEntry(id);
   }, []);
 
+  /**
+   * A page loaded at an item's address (#id, the default addresses) opens with that item
+   * open. The entry becomes the plain page with the item's entry above it, as if it had
+   * been tapped, so Back closes it and stays on the page. A custom history url is the
+   * item's own page, so there's nothing to open over.
+   */
+  /** The item the address names (default #id addresses only); `known`: one of ours. */
+  const addressedId = (known = true) => {
+    const h = historyOption();
+    if (!h || h.url || location.hash.length < 2) return null;
+    try {
+      const id = decodeURIComponent(location.hash.slice(1));
+      return !known || sources.current.has(id) ? id : null;
+    } catch {
+      return null;
+    }
+  };
+  // Opens the item the page loaded at, already open, once its source has registered.
+  const openAddressed = useRef(() => {});
+  openAddressed.current = () => {
+    const id = S.addressed;
+    if (!id || S.phase !== "idle" || !sources.current.has(id)) return;
+    S.addressed = null;
+    window.history.replaceState(null, "", location.pathname + location.search);
+    S.instant = true;
+    open(id);
+  };
+  useEffect(() => {
+    // Sources may register before this runs (their effects come first) or later.
+    S.addressed = addressedId(false);
+    const raf = requestAnimationFrame(() => openAddressed.current());
+    // The address changed within the page (typed, or a link to #id): open it as a tap
+    // would. The browser has already added the entry, so it's adopted, not added again.
+    const onHash = () => {
+      S.addressed = null;
+      const id = addressedId();
+      if (!id || S.phase !== "idle") return;
+      S.fromPop = true; // no entry of our own
+      try {
+        open(id);
+      } finally {
+        S.fromPop = false;
+      }
+      S.histDepth = 1;
+      window.history.replaceState({ zoom: id, depth: 1 }, "", urlFor(id));
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, []);
+
   // First open from idle: runs after the cards mount but before they paint.
   useLayoutEffect(() => {
     if (!session || !S.pendingOpen) return;
     const id = S.pendingOpen;
     S.pendingOpen = null;
+    const instant = S.instant; // (with reduced motion it fades in as usual)
+    S.instant = false;
     const gen = ++S.gen;
     const root = rootRef.current!;
     const zoomer = zoomerRef.current!;
@@ -1350,6 +1411,20 @@ export function ZoomProvider(props: ZoomProviderProps) {
     // A stream opens scrolled to this item's card (as near the top as the column allows).
     if (L.stream) scrollStreamTo(S.index);
     const at = slot(S.index);
+
+    if (instant) {
+      // Opened from the address as the page loaded: already open, no flight. The zoom it
+      // would have started from is still worked out, for dragging and closing later.
+      S.s0 = zoomOnto(rel(S.origin!.getBoundingClientRect()), at.x, at.y).s;
+      zx.jump(0);
+      zy.jump(0);
+      zs.jump(1);
+      hideForOpen();
+      root.dataset.open = "";
+      emitAll("opening");
+      openDone();
+      return;
+    }
 
     // Measure at full size first, before the zoom is applied (and before any writes).
     const card = cardEls.current.get(id)!;

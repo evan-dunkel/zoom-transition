@@ -32,20 +32,43 @@ export function mountPortfolio(props: Partial<ZoomProviderProps> = {}) {
   document.addEventListener("click", copyEmail);
 }
 
-// About's call to action: copy the address (the button's only job), falling back to
-// selecting it so the reader can copy it themselves.
+// About's call to action: copy the address (the button's only job). The clipboard API
+// needs a secure page (https, or localhost), so elsewhere (a phone on a dev server's LAN
+// address) it falls back to copying a selection, which works during the tap. Only if
+// both fail does it select the address and say how to copy it on this device.
 function copyEmail(e: MouseEvent) {
   const button = (e.target as Element).closest<HTMLButtonElement>("[data-copy-email]");
   if (!button) return;
   const email = button.parentElement!.querySelector<HTMLElement>("[data-email]")!;
+  const text = email.textContent!.trim();
   const done = (label: string) => {
     button.textContent = label;
-    setTimeout(() => (button.textContent = "Copy email"), 2000);
+    clearTimeout(Number(button.dataset.reset));
+    button.dataset.reset = String(setTimeout(() => (button.textContent = "Copy email"), 2000));
   };
-  const select = () => {
+  const fallback = () => {
+    if (copyBySelection(text)) return done("Copied");
     getSelection()?.selectAllChildren(email);
-    done("Selected: press ⌘C");
+    const touch = matchMedia("(pointer: coarse)").matches;
+    done(touch ? "Hold to copy" : /Mac|iP/.test(navigator.platform) ? "Press ⌘C" : "Press Ctrl+C");
   };
-  if (navigator.clipboard) navigator.clipboard.writeText(email.textContent!.trim()).then(() => done("Copied"), select);
-  else select();
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(() => done("Copied"), fallback);
+  else fallback();
+}
+
+/** The older route: select the text in an off-screen field and copy that. */
+function copyBySelection(text: string) {
+  const field = document.createElement("textarea");
+  field.value = text;
+  field.readOnly = true; // no keyboard on phones
+  field.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px;pointer-events:none";
+  document.body.append(field);
+  field.select();
+  field.setSelectionRange(0, text.length); // iOS
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {}
+  field.remove();
+  return ok;
 }
