@@ -121,8 +121,8 @@ test("the image sits on the card, and the card grows out from behind it", async 
     const hero = document.querySelector<HTMLElement>('[data-zoom-id="tidewater-transit"] [data-zoom-hero]')!.getBoundingClientRect();
     return { inset: hero.left - card.left, top: hero.top - card.top };
   });
-  expect(rest.inset).toBeGreaterThan(10);
-  expect(rest.top).toBeGreaterThan(10);
+  expect(rest.inset).toBeGreaterThanOrEqual(8);
+  expect(rest.top).toBeCloseTo(rest.inset, 0); // as far in at the top as at the sides
 });
 
 test("a vertical drag scrolls; a sideways drag closes", async ({ page }) => {

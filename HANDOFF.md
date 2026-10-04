@@ -246,6 +246,11 @@ moves the whole card (no seam). Do not move the background back onto `.zoom-card
   third the visible one via `setIndex(i, quiet)`: no focus move or announcement, and
   history replaces rather than pushes. `page(d)` scrolls instead (popstate). Flights
   following scroll use the column (`scrollerOf`); their clip is the column's band.
+  Each card's sticky close bar fades over the last 64 px as its card's bottom edge
+  reaches the button (set in the same per-frame scroll handler), instead of being cut
+  off. `.zoom-card-content` is `display: flow-root` so a destination's top margin stays
+  inside its card (in a stream nothing else contains it, and the card's surface started
+  below the margin, leaving the image flush with the top).
   Gestures: vertical drags and wheel are left native; sideways closes; a tap off every
   card closes; arrows scroll. The column stops scrolling while dragged or closing.
 - Vertical pager (`orientation: "vertical"`): the axes swap. Drag axis is decided

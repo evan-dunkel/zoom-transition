@@ -1279,9 +1279,29 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const sc = streamRef.current;
     if (!session || !sc) return;
     let raf = 0;
+    // Each card's close button sticks to the top while its card is in view. As the
+    // card scrolls away its bottom edge would cut the button off; instead it fades out
+    // over the last CLOSE_FADE px. Everything is read first, then written.
+    const CLOSE_FADE = 64;
+    const fadeCloseButtons = () => {
+      const reads = S.ids.map((id) => {
+        const card = cardEls.current.get(id);
+        const bar = card?.querySelector<HTMLElement>(".zoom-close-bar");
+        const button = bar?.firstElementChild as HTMLElement | null | undefined;
+        if (!card || !bar || !button) return null;
+        return { bar, room: card.getBoundingClientRect().bottom - button.getBoundingClientRect().bottom };
+      });
+      reads.forEach((r) => {
+        if (!r) return;
+        const o = clamp(r.room / CLOSE_FADE, 0, 1);
+        r.bar.style.opacity = o >= 1 ? "" : String(o);
+        r.bar.style.pointerEvents = o < 0.5 ? "none" : "";
+      });
+    };
     const pick = () => {
       raf = 0;
       if (S.phase !== "open") return;
+      fadeCloseButtons();
       const box = sc.getBoundingClientRect();
       const line = box.top + box.height / 3;
       let best = S.index;

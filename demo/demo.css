@@ -246,7 +246,11 @@ button { font: inherit; color: inherit; }
 .portfolio {
   --read: "Newsreader", ui-serif, "New York", Georgia, serif;
   --display: "Bricolage Grotesque", -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --zoom-card-radius: 20px;
+  /* Concentric corners: card 28 px, image 10 px in (so 18 px), close button 28 px across
+     on the same centre. */
+  --zoom-card-radius: 28px;
+  --zoom-close-size: 28px;
+  --zoom-close-inset: 14px;
 }
 .layout-switch { display: flex; width: min(360px, calc(100% - 40px)); }
 .pf-name { font-family: var(--display); font-weight: 750; letter-spacing: -0.02em; }
@@ -258,7 +262,7 @@ button { font: inherit; color: inherit; }
 .pf-work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
 @media (min-width: 700px) { .pf-work { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; } }
 .pf-tile, .pf-row { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.pf-tile-art { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; transition: transform 150ms var(--ease-press); }
+.pf-tile-art { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden; transition: transform 150ms var(--ease-press); }
 .pf-tile:active .pf-tile-art, .pf-row:active .pf-row-art { transform: scale(0.98); }
 .pf-tile-title { display: block; margin-top: 12px; font-family: var(--display); font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
 .pf-tile-meta { display: block; margin-top: 3px; font-size: 14px; line-height: 1.35; color: var(--text2); }
@@ -279,10 +283,9 @@ button { font: inherit; color: inherit; }
 .pf-page { padding-bottom: 8px; }
 /* The image sits on the card, inset over a band tinted with its own ground, like a
    book's cover; the card grows out from behind it as it opens. */
-.pf-stage { padding: 20px 20px 4px; background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 26%, var(--card)) 0%, var(--card) 88%); }
-.pf-hero { position: relative; display: block; overflow: hidden; border-radius: 14px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
-.pf-hero-note { border-radius: 12px; }
-@media (max-width: 540px) { .pf-stage { padding: 14px 14px 2px; } }
+.pf-stage { padding: 10px 10px 0; background: linear-gradient(180deg, color-mix(in oklab, var(--tint) 26%, var(--card)) 0%, var(--card) 88%); }
+.pf-hero { position: relative; display: block; overflow: hidden; border-radius: 18px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+
 .pf-hero-work { aspect-ratio: 4 / 3; }
 .pf-hero-note { aspect-ratio: 16 / 9; }
 .pf-text { max-width: 620px; margin: 0 auto; padding: 22px 22px 0; }

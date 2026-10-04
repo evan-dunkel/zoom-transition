@@ -50,6 +50,11 @@ Plus `src/zoom/` (the library) and `src/zoom/zoom.css`.
 />
 ```
 
+Corners are concentric, set in `style.css`: the card's radius (28 px), the image's inset
+(10 px, as padding so it stays inside the card) and so the image's radius (18 px, also
+the tiles'), and the close button (28 px across, on the same centre via
+`--zoom-close-size` and `--zoom-close-inset`).
+
 Everything else is a default: the spring timing (open 0.5 s, close 1.75× faster),
 closing with ✕, Escape, or a sideways drag or scroll, and reduced motion becoming a fade.
 On a real site, give `history` your real URLs (`url: (id) => "/work/" + id`), so a

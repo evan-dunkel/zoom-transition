@@ -68,14 +68,16 @@
 .zoom-dragging .zoom-stream,
 .zoom-root[data-phase="closing"] .zoom-stream { overflow-y: hidden; }
 
+/* Size and inset are themeable: to sit it concentric with a card's corner, put its centre
+   on the corner's centre (inset = card radius − size / 2). */
 .zoom-close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: var(--zoom-close-inset, 14px);
+  right: var(--zoom-close-inset, 14px);
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: var(--zoom-close-size, 30px);
+  height: var(--zoom-close-size, 30px);
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -97,13 +99,16 @@
 
 .zoom-card-content {
   position: relative;
+  display: flow-root; /* keeps the destination's margins inside the card (they'd escape in a stream) */
   min-height: 100%;
   overflow: clip; /* keep the content inside the rounded corners when it bounces */
   border-radius: var(--zoom-card-radius, 28px);
   background: var(--zoom-card-bg, #fff);
 }
 /* A zero-height sticky bar at the top of the content: the close button stays put
-   while you scroll, and moves with the card when it bounces. */
+   while you scroll, and moves with the card when it bounces. In a stream it fades
+   out as its card scrolls away (opacity set from script), rather than being cut off
+   by the card's edge. */
 .zoom-close-bar { position: sticky; top: 0; height: 0; z-index: 6; }
 
 /* Debug: wheel-dismiss edge zones (debug prop). If any of a band is on screen, a

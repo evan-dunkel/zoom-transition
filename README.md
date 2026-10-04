@@ -201,7 +201,10 @@ React island, or keep the markup in Astro and use one small island with `scan`
   ```tsx
   <ZoomProvider orientation="vertical" flyHome="visible" groupOpacity={0.35} ...>
   ```
-- `closeButton` — `true`, `false`, or `(close) => <YourButton/>`.
+- `closeButton` — `true`, `false`, or `(close) => <YourButton/>`. Size and position it with
+  `--zoom-close-size` (30px) and `--zoom-close-inset` (14px); to sit it concentric with the
+  card's corner, make the inset the card radius minus half its size. In a stream it fades
+  out as its card scrolls away.
 - `history` — off by default. `{ mode: "session" }`: opening adds one history entry,
   swiping only updates the address, Back closes (for sets people flick through,
   like the books). `{ mode: "item" }`: every item visited adds an entry and Back
