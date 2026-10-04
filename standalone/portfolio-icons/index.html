@@ -12,40 +12,48 @@
 </head>
 <body>
 <!--
-  The icon prototype. Same pattern as standalone/portfolio, with two differences:
+  The portfolio, current work first. Same pattern as standalone/portfolio, plus:
 
-  1. Every source is in one group ("portfolio"), so projects, writing and About open
-     into one continuous stream. data-zoom-section names each source's section; the
-     stream shows that title above the first card of each section, styled like the
-     page's own section titles (.section-title).
-  2. Each piece leads with its image as an icon: a square on the left (the hero),
-     the title and one line of metadata beside it, then the text.
+  1. Every source is in one group ("portfolio"), so everything opens into one stream.
+     data-zoom-section names each source's section; the stream shows that title above
+     the section's first card, styled like the page's own section titles (.section-title).
+  2. Two card styles, by how closely a piece is read: Air Apps case studies lead with a
+     large image (.piece-feature); personal projects, writing and About lead with an
+     icon beside the title (.piece-head).
+
+  [Bracketed text] is a placeholder to replace with your own.
 -->
 <main>
   <header class="intro">
-    <h1>Ines Calder</h1>
-    <p>Product designer. I work on interfaces that move well and read well: transit, reading, health, and the systems behind them.</p>
-    <p class="note">Sample portfolio. Open anything and keep scrolling: projects, writing and About follow in one stream. Swipe sideways, press Esc or ✕ to close.</p>
+    <h1>Your Name</h1>
+    <p>Product designer at Air Apps in San Francisco. I design consumer apps, and prototype the motion and gestures that make them feel native.</p>
+    <p class="note">Prototype. Open anything and keep scrolling: Air Apps, personal projects, writing and About follow in one stream. Swipe sideways, press Esc or ✕ to close.</p>
   </header>
 
-  <section aria-labelledby="projects">
-    <h2 id="projects" class="section-title">Projects</h2>
+  <section aria-labelledby="air-apps">
+    <h2 id="air-apps" class="section-title">Air Apps</h2>
+    <ul class="work">
+      <li><a class="tile" href="/work/air-one">
+        <div class="tile-image" data-zoom-source="air-one" data-zoom-group="portfolio" data-zoom-section="Air Apps"><img src="images/air-one.svg" alt=""></div>
+        <h3>[Project name]</h3><p class="sub">Air Apps · Product designer · 2025</p>
+      </a></li>
+      <li><a class="tile" href="/work/air-two">
+        <div class="tile-image" data-zoom-source="air-two" data-zoom-group="portfolio" data-zoom-section="Air Apps"><img src="images/air-two.svg" alt=""></div>
+        <h3>[Project name]</h3><p class="sub">Air Apps · Product designer · 2024</p>
+      </a></li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="personal">
+    <h2 id="personal" class="section-title">Personal projects</h2>
     <ul class="list">
-      <li><a class="item" href="/work/tidewater">
-        <div class="item-icon" data-zoom-source="tidewater" data-zoom-group="portfolio" data-zoom-section="Projects"><img src="../portfolio/images/tidewater.svg" alt=""></div>
-        <div class="item-text"><h3>Tidewater Transit</h3><p class="sub">Lead product designer · 2025</p><p>Trip planning for a coastal city’s ferries and buses.</p></div>
+      <li><a class="item" href="/projects/zoom">
+        <div class="item-icon" data-zoom-source="zoom" data-zoom-group="portfolio" data-zoom-section="Personal projects"><img src="images/zoom.svg" alt=""></div>
+        <div class="item-text"><h3>Zoom transitions</h3><p class="sub">Personal project · 2026</p><p>The open-in-place transitions this site runs on.</p></div>
       </a></li>
-      <li><a class="item" href="/work/fernwood">
-        <div class="item-icon" data-zoom-source="fernwood" data-zoom-group="portfolio" data-zoom-section="Projects"><img src="../portfolio/images/fernwood.svg" alt=""></div>
-        <div class="item-text"><h3>Fernwood Reader</h3><p class="sub">Product designer · 2024</p><p>An e-reading app for an independent press.</p></div>
-      </a></li>
-      <li><a class="item" href="/work/atlas">
-        <div class="item-icon" data-zoom-source="atlas" data-zoom-group="portfolio" data-zoom-section="Projects"><img src="../portfolio/images/atlas.svg" alt=""></div>
-        <div class="item-text"><h3>Atlas Clinic</h3><p class="sub">Senior product designer · 2024</p><p>Scheduling for a network of community clinics.</p></div>
-      </a></li>
-      <li><a class="item" href="/work/kiln">
-        <div class="item-icon" data-zoom-source="kiln" data-zoom-group="portfolio" data-zoom-section="Projects"><img src="../portfolio/images/kiln.svg" alt=""></div>
-        <div class="item-text"><h3>Kiln</h3><p class="sub">Design systems lead · 2023</p><p>A design system for a handmade ceramics marketplace.</p></div>
+      <li><a class="item" href="/projects/personal-two">
+        <div class="item-icon" data-zoom-source="personal-two" data-zoom-group="portfolio" data-zoom-section="Personal projects"><img src="images/personal.svg" alt=""></div>
+        <div class="item-text"><h3>[Project name]</h3><p class="sub">Personal project · [Year]</p><p>[One line on what it is.]</p></div>
       </a></li>
     </ul>
   </section>
@@ -77,87 +85,82 @@
     <ul class="list">
       <li><a class="item" href="/about">
         <div class="item-icon" data-zoom-source="about" data-zoom-group="portfolio" data-zoom-section="About"><img src="images/portrait.svg" alt=""></div>
-        <div class="item-text"><h3>Ines Calder</h3><p class="sub">Open to product design roles · New York or remote</p><p>Eight years designing tools people use all day. Looking for a team that builds tools for designers.</p></div>
+        <div class="item-text"><h3>Your Name</h3><p class="sub">Product designer at Air Apps · San Francisco</p><p>3½ years in product design. Looking for a team that builds tools for designers.</p></div>
       </a></li>
     </ul>
   </section>
 </main>
 
-<!-- Pieces. Each leads with its image as an icon (data-zoom-hero), the title beside it. -->
+<!-- Air Apps case studies: the image leads, full width on the card (data-zoom-hero). -->
 
-<template data-zoom-destination="tidewater">
-  <article class="piece">
-    <header class="piece-head">
-      <div class="piece-icon" data-zoom-hero><img src="../portfolio/images/tidewater.svg" alt="Two phone screens of the Tidewater trip planner"></div>
-      <div class="piece-title"><h2>Tidewater Transit</h2><p class="sub">Lead product designer · Transit · 2025</p></div>
-    </header>
+<template data-zoom-destination="air-one">
+  <article class="piece piece-feature">
+    <div class="piece-image" data-zoom-hero><img src="images/air-one.svg" alt="[Describe the screens shown]"></div>
     <div class="piece-text">
-      <p class="lede">Riders were planning trips across three apps and a printed timetable. We folded ferries, buses and the tide-dependent water taxi into one planner that tells you when to leave, not just which way to go.</p>
-      <dl class="facts"><div><dt>Role</dt><dd>Lead product designer</dd></div><div><dt>Team</dt><dd>2 designers, 5 engineers</dd></div><div><dt>Timeline</dt><dd>9 months</dd></div><div><dt>Platform</dt><dd>iOS, Android, web</dd></div></dl>
-      <h3>The problem with routes</h3>
-      <p>Most trip planners answer the question “which way?”. Our riders already knew which way. What they didn’t know was whether the 7:40 ferry would run with the tide that morning, or whether the bus would wait for it.</p>
-      <p>Interviews with forty commuters kept returning to the same moment: standing at the door, checking three apps, deciding whether to run.</p>
-      <h3>Leave by, not arrive by</h3>
-      <p>The planner leads with one instruction: leave in 6 minutes. The route, transfers and fare sit underneath and open on a tap. Live data from the ferry operator moves that number as conditions change, and a notification fires only if it moves by more than two minutes.</p>
-      <h3>What shipped</h3>
-      <p>The planner launched in spring 2025. The printed timetable is still on the pier, so the app’s schedule view matches it line for line: nobody has to relearn where the 7:40 is.</p>
+      <h2>[Project name]</h2>
+      <p class="sub">Air Apps · Product designer · 2025</p>
+      <p class="lede">[One or two sentences: what the app is, who it’s for, and what changed because of your work. Lead with the outcome.]</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Product designer</dd></div><div><dt>Team</dt><dd>[n designers, n engineers]</dd></div><div><dt>Timeline</dt><dd>[n months]</dd></div><div><dt>Platform</dt><dd>[iOS, Android]</dd></div></dl>
+      <h3>[The problem]</h3>
+      <p>[What you knew going in: who was struggling, with what, and how you found out.]</p>
+      <h3>[The decision]</h3>
+      <p>[What you tried, what you chose, and why. One decision per section.]</p>
+      <h3>[The outcome]</h3>
+      <p>[What shipped and what changed, with a number if you have one.]</p>
     </div>
   </article>
 </template>
 
-<template data-zoom-destination="fernwood">
-  <article class="piece">
-    <header class="piece-head">
-      <div class="piece-icon" data-zoom-hero><img src="../portfolio/images/fernwood.svg" alt="The Fernwood house serif"></div>
-      <div class="piece-title"><h2>Fernwood Reader</h2><p class="sub">Product designer · Publishing · 2024</p></div>
-    </header>
+<template data-zoom-destination="air-two">
+  <article class="piece piece-feature">
+    <div class="piece-image" data-zoom-hero><img src="images/air-two.svg" alt="[Describe the screens shown]"></div>
     <div class="piece-text">
-      <p class="lede">Fernwood publishes about twenty books a year and wanted readers to buy them direct. The app is a small shop and a careful reading room, with a store that feels like browsing the table at the front of a bookshop.</p>
-      <dl class="facts"><div><dt>Role</dt><dd>Product designer</dd></div><div><dt>Team</dt><dd>1 designer, 3 engineers</dd></div><div><dt>Timeline</dt><dd>6 months</dd></div><div><dt>Platform</dt><dd>iOS, iPadOS</dd></div></dl>
-      <h3>Typesetting for screens</h3>
-      <p>Every Fernwood title is set by hand for print. We kept the press’s typefaces and margins and built the reading view around them: hanging punctuation, real small caps, and line lengths that adapt to the device but never pass seventy characters.</p>
-      <h3>A shelf that opens</h3>
-      <p>Covers face out on short shelves, and tapping one opens it in place: the cover flies from the shelf into the book’s page and opens as it arrives. Dragging down closes it back onto its shelf.</p>
-      <p>Each shelf holds five books, sized so the next cover always peeks in from the edge. That peek did more for browsing than any “see all” link we tried.</p>
-      <h3>Results</h3>
-      <p>Within a year, direct sales became a steady share of the press’s income. Most of the email we got from readers was about the typography.</p>
+      <h2>[Project name]</h2>
+      <p class="sub">Air Apps · Product designer · 2024</p>
+      <p class="lede">[One or two sentences: what the app is, who it’s for, and what changed because of your work. Lead with the outcome.]</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Product designer</dd></div><div><dt>Team</dt><dd>[n designers, n engineers]</dd></div><div><dt>Timeline</dt><dd>[n months]</dd></div><div><dt>Platform</dt><dd>[iOS, Android]</dd></div></dl>
+      <h3>[The problem]</h3>
+      <p>[What you knew going in: who was struggling, with what, and how you found out.]</p>
+      <h3>[The decision]</h3>
+      <p>[What you tried, what you chose, and why. One decision per section.]</p>
+      <h3>[The outcome]</h3>
+      <p>[What shipped and what changed, with a number if you have one.]</p>
     </div>
   </article>
 </template>
 
-<template data-zoom-destination="atlas">
+<!-- Personal projects, writing and About: an icon leads, the title beside it. -->
+
+<template data-zoom-destination="zoom">
   <article class="piece">
     <header class="piece-head">
-      <div class="piece-icon" data-zoom-hero><img src="../portfolio/images/atlas.svg" alt="A bar chart of clinic arrivals"></div>
-      <div class="piece-title"><h2>Atlas Clinic</h2><p class="sub">Senior product designer · Health · 2024</p></div>
+      <div class="piece-icon" data-zoom-hero><img src="images/zoom.svg" alt="A tile growing into a card"></div>
+      <div class="piece-title"><h2>Zoom transitions</h2><p class="sub">Personal project · 2026</p></div>
     </header>
     <div class="piece-text">
-      <p class="lede">Front-desk staff juggled walk-ins, appointments and interpreters across six clinics in a shared spreadsheet. Atlas gives each desk one view of the day and turns rescheduling into a drag instead of a phone tree.</p>
-      <dl class="facts"><div><dt>Role</dt><dd>Senior product designer</dd></div><div><dt>Team</dt><dd>3 designers, 8 engineers</dd></div><div><dt>Timeline</dt><dd>14 months</dd></div><div><dt>Platform</dt><dd>Web</dd></div></dl>
-      <h3>Designing for the busiest hour</h3>
-      <p>We spent two weeks at front desks before drawing anything. Between 8 and 10 a.m. a desk checks in a patient every ninety seconds, often with a phone to one ear. That set the rule for every interaction: if it needs two hands or a second screen, it won’t get used.</p>
-      <h3>One timeline per room</h3>
-      <p>The day view is a stack of timelines, one per room and provider. Appointments are blocks you can drag between rooms. While you drag, Atlas checks interpreter and equipment availability and shades the slots that won’t work before you let go.</p>
-      <h3>Rollout</h3>
-      <p>Atlas replaced the spreadsheet one clinic at a time over five months. We kept a printed day sheet as an export, because some desks still like paper at the end of the day.</p>
+      <p class="lede">A transition system for opening things in place: a tile grows into its page, and closing puts it back where it was. It’s what this site runs on.</p>
+      <dl class="facts"><div><dt>Role</dt><dd>Design and code</dd></div><div><dt>Built with</dt><dd>React, Motion</dd></div><div><dt>Runs on</dt><dd>Touch and desktop</dd></div><div><dt>Status</dt><dd>In use on this site</dd></div></dl>
+      <h3>Interruptible everywhere</h3>
+      <p>Every flight can change its mind. Close something halfway through opening and it turns around from exactly where it is, at the speed it was moving, because every motion is a spring that carries its velocity.</p>
+      <h3>The details that read as native</h3>
+      <p>Corner radii tween through the flight instead of snapping at the end. The image’s shadow fades with the flight. Corners are drawn as superellipses fitted to iOS’s 60% corner smoothing, and a thumbnail’s crop eases open evenly as it grows.</p>
+      <h3>Tuned on real hardware</h3>
+      <p>Gestures were tuned on phones and trackpads, not in a simulator. Sideways scrolling to close felt right on touch but wasn’t dependable on desktop trackpads, so on desktop it’s off: a gesture that works most of the time teaches people not to trust it.</p>
     </div>
   </article>
 </template>
 
-<template data-zoom-destination="kiln">
+<template data-zoom-destination="personal-two">
   <article class="piece">
     <header class="piece-head">
-      <div class="piece-icon" data-zoom-hero><img src="../portfolio/images/kiln.svg" alt="Kiln's core shapes on a clay-coloured ground"></div>
-      <div class="piece-title"><h2>Kiln</h2><p class="sub">Design systems lead · Marketplace · 2023</p></div>
+      <div class="piece-icon" data-zoom-hero><img src="images/personal.svg" alt=""></div>
+      <div class="piece-title"><h2>[Project name]</h2><p class="sub">Personal project · [Year]</p></div>
     </header>
     <div class="piece-text">
-      <p class="lede">Kiln sells work from four hundred potters. The system had to make every product page consistent while letting glazes, textures and studio stories stay as varied as the pots.</p>
-      <dl class="facts"><div><dt>Role</dt><dd>Design systems lead</dd></div><div><dt>Team</dt><dd>2 designers, 2 engineers</dd></div><div><dt>Timeline</dt><dd>8 months</dd></div><div><dt>Platform</dt><dd>Web, iOS</dd></div></dl>
-      <h3>Quiet components, loud photography</h3>
-      <p>Components carry almost no colour of their own. Each page takes a tint from its lead photo, sampled at build time, so a celadon bowl and a raku jar each sit on a ground that suits them.</p>
-      <h3>Tokens potters can read</h3>
-      <p>Sellers edit their own studio pages, so the tokens are named in their words: clay, slip, glaze, kiln. An engineer writes glaze-strong; a seller picks “Glaze” from a menu. Both get the same colour.</p>
-      <p>Within two quarters every product and studio page ran on the system, and new features shipped without one-off CSS.</p>
+      <p class="lede">[What it is and why you made it, in two sentences.]</p>
+      <dl class="facts"><div><dt>Role</dt><dd>[Design, code]</dd></div><div><dt>Built with</dt><dd>[Tools]</dd></div><div><dt>Timeline</dt><dd>[n weeks]</dd></div><div><dt>Status</dt><dd>[Live, prototype]</dd></div></dl>
+      <h3>[What you were exploring]</h3>
+      <p>[The question the project answered, and what you learned.]</p>
     </div>
   </article>
 </template>
@@ -227,23 +230,23 @@
 <template data-zoom-destination="about">
   <article class="piece">
     <header class="piece-head">
-      <div class="piece-icon" data-zoom-hero><img src="images/portrait.svg" alt="Portrait of Ines Calder"></div>
-      <div class="piece-title"><h2>Ines Calder</h2><p class="sub">Product designer · Open to new roles</p></div>
+      <div class="piece-icon" data-zoom-hero><img src="images/portrait.svg" alt="Portrait"></div>
+      <div class="piece-title"><h2>Your Name</h2><p class="sub">Product designer at Air Apps · San Francisco</p></div>
     </header>
     <div class="piece-text">
-      <p class="lede">I design tools people use all day, and I sweat how they feel in the hand: the transition that can change its mind, the list that keeps your place, the screen a busy person reads in a glance.</p>
-      <dl class="facts"><div><dt>Experience</dt><dd>8 years, 3 as a lead</dd></div><div><dt>Based in</dt><dd>New York, open to remote</dd></div><div><dt>Strengths</dt><dd>Interaction, prototyping, systems</dd></div><div><dt>Available</dt><dd>From January 2027</dd></div></dl>
+      <p class="lede">I design consumer apps at Air Apps, and I prototype in code: motion, gestures, and the small details that make an interface feel native.</p>
+      <dl class="facts"><div><dt>Experience</dt><dd>3½ years in product design</dd></div><div><dt>Now</dt><dd>Product designer, Air Apps</dd></div><div><dt>Based in</dt><dd>San Francisco</dd></div><div><dt>Focus</dt><dd>Interaction, motion, prototyping</dd></div></dl>
       <h3>What I’m looking for</h3>
-      <p>A senior product design role on a team that builds tools for designers: canvases, prototyping, design systems. I prototype in code, so engineers get motion and edge cases they can run, not just a spec.</p>
+      <p>A product design role on a team that builds tools for designers: canvases, prototyping, design systems. Engineers get prototypes they can run, with the motion and edge cases worked out, not just a spec.</p>
       <ul class="proof">
-        <li><strong>Leave by, not arrive by.</strong> Tidewater’s planner, shipped on three platforms with five engineers.</li>
-        <li><strong>A system sellers can read.</strong> Every Kiln page on one system within two quarters.</li>
-        <li><strong>Designed at the front desk.</strong> Atlas replaced a six-clinic spreadsheet in five months.</li>
+        <li><strong>[Air Apps outcome.]</strong> [What shipped, and the number that moved.]</li>
+        <li><strong>[Air Apps outcome.]</strong> [What shipped, and the number that moved.]</li>
+        <li><strong>Built the transitions on this site.</strong> Interruptible springs, smoothed corners, tuned on real devices.</li>
       </ul>
       <div class="cta">
         <h3>Let’s talk</h3>
         <p>If your team is hiring, I’d love a call. I reply within a day.</p>
-        <p class="cta-email"><span data-email>ines@calder.example</span><button type="button" class="cta-button" data-copy-email>Copy email</button></p>
+        <p class="cta-email"><span data-email>you@example.com</span><button type="button" class="cta-button" data-copy-email>Copy email</button></p>
       </div>
     </div>
   </article>

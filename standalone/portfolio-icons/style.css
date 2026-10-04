@@ -1,5 +1,6 @@
-/* The icon prototype: one list on the page, one stream of cards when open. Shared parts
-   (tokens, smoothing) match standalone/portfolio/style.css. */
+/* Current work first, in one stream: Air Apps as large tiles and image-led cards; personal
+   projects, writing and About as icon rows and icon-led cards. Shared parts (tokens,
+   smoothing) match standalone/portfolio/style.css. */
 :root {
   --bg: #f6f6f3;
   --card: #ffffff;
@@ -51,6 +52,14 @@ ul { margin: 0; padding: 0; list-style: none; }
 /* One section-title style, on the page and between the cards of the open stream. */
 .section-title { margin: 0 0 6px; font: 750 30px/1.1 var(--display); letter-spacing: -0.02em; text-wrap: balance; }
 
+/* Air Apps: large tiles, read closely. */
+.work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; margin-top: 10px; }
+@media (min-width: 700px) { .work { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; } }
+.tile-image { aspect-ratio: 4 / 3; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; } /* same corner as on the card */
+.tile h3 { margin: 12px 0 0; font: 700 21px/1.2 var(--display); letter-spacing: -0.01em; }
+.tile .sub { margin: 3px 0 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; color: var(--muted); }
+
+/* Everything else: icon rows, skimmed. */
 .list li + li { border-top: 1px solid var(--line); }
 .item { display: flex; align-items: center; gap: 16px; padding: 14px 0; }
 .item-icon { flex: none; width: var(--icon); aspect-ratio: 1; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; }
@@ -99,7 +108,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .piece-icon { flex: none; width: var(--icon); aspect-ratio: 1; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 12px 24px -12px rgba(0, 0, 0, 0.45); }
 .piece-title { min-width: 0; }
 .piece h2 { margin: 0; font: 750 clamp(24px, 6cqw, 32px)/1.08 var(--display); letter-spacing: -0.02em; text-wrap: balance; }
-.piece .sub { margin: 5px 0 0; font: 600 13px/1.4 var(--ui); letter-spacing: 0.01em; color: var(--muted); }
+.piece .sub { margin: 5px 0 0; font: 600 13px/1.4 var(--ui); letter-spacing: 0.01em; color: var(--muted); text-wrap: nowrap; } /* one line: .piece p's text-wrap would wrap it */
 .piece-text { max-width: 620px; margin: 0 auto; padding: 18px 12px 40px; }
 .piece h3 { margin: 30px 0 0; font: 700 21px/1.25 var(--display); }
 .piece p { margin: 12px 0 0; font: 18px/1.6 var(--read); text-wrap: pretty; }
@@ -108,6 +117,13 @@ ul { margin: 0; padding: 0; list-style: none; }
 .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin: 22px 0 0; padding: 16px 0; border-block: 1px solid var(--line); }
 .facts dt { font-size: 12px; color: var(--muted); }
 .facts dd { margin: 3px 0 0; font-size: 15px; }
+
+/* Air Apps cards: the image leads, inset on the card (padding, as for the icon), then
+   the title and its one line of metadata. */
+.piece-feature .piece-image { aspect-ratio: 4 / 3; border-radius: calc(var(--image-radius) * var(--smooth)); corner-shape: var(--smooth-shape); overflow: hidden; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 18px 36px -18px rgba(0, 0, 0, 0.45); }
+.piece-feature .piece-text { padding-top: 22px; }
+.piece-feature h2 { font-size: clamp(30px, 8cqw, 44px); line-height: 1.04; letter-spacing: -0.025em; }
+.piece-feature .lede { margin-top: 16px; }
 
 /* About: proof in three lines, then one easy way to reply. */
 .proof { margin: 18px 0 0; display: grid; gap: 12px; }

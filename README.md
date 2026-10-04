@@ -23,9 +23,10 @@ and closing sends every card back to its own source.
   (`Portfolio.tsx`)
 - `standalone/portfolio/` — the portfolio at its simplest: plain markup, one island, one
   stylesheet (`npm run build:portfolio` → `dist/portfolio.html`). Start here to map it onto a site.
-- `standalone/portfolio-icons/` — the same, as a second prototype: every piece opens into one
-  stream (projects, writing, then About with a call to action) under section titles, and each
-  card leads with its image as an icon beside the title (→ `dist/portfolio-icons.html`).
+- `standalone/portfolio-icons/` — a second prototype: every piece opens into one stream
+  under section titles (Air Apps, personal projects, writing, then About with a call to
+  action). Air Apps cards lead with a large image; the rest lead with an icon beside the
+  title (→ `dist/portfolio-icons.html`).
   Both are built by `standalone/build.py <folder>`.
 - `astro-example/` — how it drops into an Astro portfolio
 

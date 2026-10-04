@@ -41,7 +41,8 @@ demo/                main.tsx (layout switch), BookStore.tsx (shelves), BookFeed
 standalone/portfolio/ the portfolio at its simplest (plain HTML + templates + one island), built
                      to dist/portfolio.html; the reference for mapping onto a site
 standalone/portfolio-icons/ a second portfolio prototype: one stream for every section (section
-                     titles between cards), icon-led cards, About + CTA last; dist/portfolio-icons.html
+                     titles between cards), image-led Air Apps cards, icon-led cards for the
+                     rest, About + CTA last; dist/portfolio-icons.html
 standalone/build.py  builds either folder into one self-contained HTML file (+ an -artifact variant)
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
@@ -444,7 +445,8 @@ See README for details.
   `standalone-portfolio.spec.ts` also checks the flight's crop grows evenly (visible width
   and height reach the same share of the way on every frame). `standalone-portfolio-icons.spec.ts`:
   one stream across sections with titles in the page's style, the opening title in view,
-  icon geometry, the About CTA's copy button, closing across sections.
+  both card styles' geometry, one-line metadata, the About CTA's copy button, closing
+  across sections.
   `trackpad-paging.spec.ts` is timing-sensitive under load (fails occasionally with
   `--repeat-each`, before and after these changes).
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.
