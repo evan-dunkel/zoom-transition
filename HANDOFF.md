@@ -118,6 +118,13 @@ behind is live and a tap can reopen).
   full strength it popped on at take-off and off at landing; now it fades in with the
   open and out with the close, continuously through reversals. Only the hero's own
   shadow; shadows on elements inside it fly as they are.
+- Corners: the copy is scaled as a whole, which scaled its corners too (a 14 px corner
+  read ~10 px mid-flight, 1 px for a thumbnail, then jumped on landing). The provider
+  passes each end's on-screen radius (`radiusOf`: the element's own px radius, else its
+  first child's; the source on the page, the hero at its card's scale) and the flight
+  blends them by the same scale progress as the crop, writing `radius / scale` to the
+  copy, live host, shadow layer and clip. `retarget(rect, radius)` carries on from the
+  current corner. Non-px radii (percentages) are left alone.
 - `offset()` (added every frame): follows **content scrolled mid-flight**
   (`y = -(scrollNow - scroll0) * zs * cv.s`) and **paging mid-flight**
   (`(track - track0) * zs` along the pager's axis), so the hand-over is pixel-exact.
@@ -172,12 +179,12 @@ behind is live and a tap can reopen).
   to `1 − (1 − g) · p` where p is the visible card's progress (the fade with reduced
   motion), so the group dims as a card opens and returns as it lands. `markGroup` /
   `unmarkGroup` apply and clean up. Each source also has a share (`presenceOf(id)`, a
-  motion value multiplied in): 0 for the visible item's, 1 for the rest. When the
-  visible item changes while open (a page turn, or scrolling a stream on), `swapVisible`
-  springs the two shares (timing.fade) so one tile fades out as the other fades back
-  in, instead of a hard hide snapping across. Opening still hides the visible source
-  outright (`data-zoom-hidden`), since its flight lifts off exactly over it; a landing
-  card's source gets its share back at once.
+  motion value multiplied in): 0 for the hidden one, 1 for the rest. The page behind
+  stays still while open: changing the visible item (a page turn, scrolling a stream
+  on) doesn't touch it (a fading swap was distracting while reading). On close,
+  `showHiddenSourceFor(S.index)` swaps at once: the visible item's source is hidden for
+  its card to land in and the one hidden since opening (`S.hiddenAt`) comes back. A
+  landing card's source gets its share back at once.
 - `flyHome: "visible"` (`S.flyVisible`): in `transitionCards`, cards other than the
   visible one don't fly. Closing leaves them where the bake put them; reopening
   springs them back to their slots. `followVisible()` sets their `cv.o` to p², so they

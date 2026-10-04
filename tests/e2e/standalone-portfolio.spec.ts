@@ -60,3 +60,40 @@ test("the image's shadow fades in with the open and out with the close, instead 
   expect(closing[0]).toBeGreaterThan(0.7);
   expect(closing[closing.length - 1]).toBeLessThan(0.15); // gone as it lands on the tile, which has none
 });
+
+// The flying copy is scaled as a whole, which used to scale its corners too: a 14 px
+// corner read as ~10 px mid-flight (1 px for a small thumbnail) and jumped on landing.
+for (const [label, open, expected] of [
+  ["a project", ".tile", 14],
+  ["a piece of writing", ".row", 10],
+] as const) {
+  test(`corners keep their on-screen radius in flight: ${label}`, async ({ page }) => {
+    await page.goto("/dist/portfolio.html");
+    const record = () =>
+      page.evaluate(() => {
+        const seen: number[] = [];
+        (window as any).__corners = seen;
+        const tick = () => {
+          const el = document.querySelector<HTMLElement>(".zoom-clone");
+          const copy = el?.querySelector<HTMLElement>(":scope > :not(.zoom-clone-shadow)");
+          const scale = el && /scale\(([\d.e-]+)\)/.exec(el.style.transform);
+          if (copy && scale && copy.style.borderRadius) seen.push(parseFloat(copy.style.borderRadius) * Number(scale[1]));
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+    const corners = () => page.evaluate(() => (window as any).__corners as number[]);
+    await record();
+    await page.locator(open).nth(1).click();
+    await expect.poll(() => phase(page)).toBe("open");
+    const opening = await corners();
+    expect(opening.length).toBeGreaterThan(5);
+    for (const r of opening) expect(r).toBeCloseTo(expected, 0);
+    await record();
+    await page.keyboard.press("Escape");
+    await expect.poll(() => phase(page)).toBe("idle");
+    const closing = await corners();
+    expect(closing.length).toBeGreaterThan(3);
+    for (const r of closing) expect(r).toBeCloseTo(expected, 0);
+  });
+}

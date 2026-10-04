@@ -191,8 +191,9 @@ React island, or keep the markup in Astro and use one small island with `scan`
 - `hideGroupWhileOpen` — hide the whole group on the page while open (default true).
 - `groupOpacity` — instead of hiding the group, keep its other items on the page at this
   opacity (e.g. `0.35`); only the visible item's own source is hidden. They follow the
-  visible card, dimming as it opens and returning to full as it lands. When the visible
-  item changes while open, its source fades out and the last one's fades back in.
+  visible card, dimming as it opens and returning to full as it lands. The page behind
+  stays still while open (paging or scrolling on doesn't touch it); on close, the visible
+  item's source is hidden at once for its card to land in, and the opened one returns.
 - `flyHome` — `"group"` (default): closing sends every card back to its own source.
   `"visible"`: only the visible card flies home; the others stay where they are and fade
   with it (and fade in with it on open). Pair it with `groupOpacity` for a calm close:
@@ -241,6 +242,8 @@ npm test               # Playwright: builds the demo and harness, serves them, r
   same outside the card. A playing video will show as its current frame.
 - A box-shadow on the hero element itself fades in as it opens and out as it closes,
   since the source it flies from usually has none.
+- Corner radii (plain px, on the source and on the hero or their first child) blend from
+  one end's to the other's in flight, in on-screen pixels, rather than scaling with the copy.
 - If source and hero have different aspect ratios, the copy is cropped to the
   source and opens out to the hero, so nothing stretches.
 - Every item in a group is rendered as a card while open. For very large

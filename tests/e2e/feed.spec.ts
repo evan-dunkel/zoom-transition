@@ -167,7 +167,7 @@ test("Escape and the close button close, landing on the visible item's own cover
   await expect.poll(() => phase(page)).toBe("idle");
 });
 
-test("while open, the rest of the grid stays dimmed and the visible book's cover is hidden", async ({ page }) => {
+test("while open the grid stays still; on close the visible book's cover is hidden at once", async ({ page }) => {
   await openFeed(page, 4);
   const looks = () =>
     page.locator(".tile .cover-wrap").evaluateAll((els) =>
@@ -177,14 +177,18 @@ test("while open, the rest of the grid stays dimmed and the visible book's cover
   expect(now[4].hidden).toBe(true);
   expect(now[3].hidden).toBe(false);
   expect(now[3].opacity).toBeCloseTo(0.35, 2);
+  // Paging doesn't touch the grid behind: the opened book's place stays the empty one.
   await page.keyboard.press("ArrowDown");
   await page.waitForTimeout(600);
   now = await looks();
-  expect(now[4].hidden).toBe(false);
-  expect(now[4].opacity).toBeCloseTo(0.35, 2);
-  expect(now[5].hidden || now[5].opacity === 0).toBe(true); // faded out (a page turn swaps softly)
-
+  expect(now[4].hidden).toBe(true);
+  expect(now[5].hidden).toBe(false);
+  expect(now[5].opacity).toBeCloseTo(0.35, 2);
+  // Closing swaps them at once: the book flying home gets the empty place.
   await page.keyboard.press("Escape");
+  now = await looks();
+  expect(now[5].hidden).toBe(true);
+  expect(now[4].hidden).toBe(false);
   await expect.poll(() => phase(page)).toBe("idle");
   now = await looks();
   expect(now.every((l) => !l.hidden && l.opacity === 1)).toBe(true);

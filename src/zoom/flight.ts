@@ -15,8 +15,9 @@ export type Flight = {
   liveHost: HTMLElement | null;
   /** Remove the still snapshot once the live content has rendered over it. */
   dropSnapshot(): void;
-  /** Point the flight somewhere new from wherever it is now (its springs keep their speed). */
-  retarget(next: Rect): void;
+  /** Point the flight somewhere new from wherever it is now (its springs keep their speed),
+   *  optionally with the corner radius (on-screen px) it should land with. */
+  retarget(next: Rect, radius?: number): void;
   /** Re-apply the extra offset (e.g. after the card's content scrolled). */
   invalidate(): void;
   destroy(): void;
@@ -29,6 +30,8 @@ export type HeroMetrics = {
   /** The hero's own box-shadow ("none" if it has none) and corner radius, for the flight's shadow layer. */
   shadow: string;
   shadowRadius: string;
+  /** The hero element's own corner radius (px), for blending corners in flight. */
+  ownRadius: number;
 };
 
 /** Far enough outside the copy's box that nothing a hero paints reaches it. */
@@ -37,7 +40,31 @@ const OUTSIDE = 10000;
 /** Read everything a flight needs from the hero, in one go, before anything is written. */
 export function measureHero(hero: HTMLElement): HeroMetrics {
   const cs = getComputedStyle(hero);
-  return { W0: hero.offsetWidth, H0: hero.offsetHeight, radius: readRadius(hero), shadow: cs.boxShadow, shadowRadius: cs.borderRadius };
+  return {
+    W0: hero.offsetWidth,
+    H0: hero.offsetHeight,
+    radius: readRadius(hero),
+    shadow: cs.boxShadow,
+    shadowRadius: cs.borderRadius,
+    ownRadius: radiusOf(hero, cs),
+  };
+}
+
+/**
+ * An element's corner radius in px: its own, or else its first child's (an image
+ * inside a wrapper often carries the rounding). 0 for anything that isn't a plain px
+ * value (percentages, elliptical corners): those corners are left to scale as they are.
+ */
+export function radiusOf(el: HTMLElement, cs: CSSStyleDeclaration = getComputedStyle(el)) {
+  const own = pxRadius(cs.borderTopLeftRadius);
+  if (own > 0) return own;
+  const child = el.firstElementChild as HTMLElement | null;
+  return child ? pxRadius(getComputedStyle(child).borderTopLeftRadius) : 0;
+}
+
+/** A corner radius in px, or 0 when it isn't a plain px value (percentages, elliptical). */
+export function pxRadius(value: string) {
+  return /^[\d.]+px$/.test(value.trim()) ? parseFloat(value) : 0;
 }
 
 /**
@@ -89,6 +116,13 @@ export function createFlight(
      * pops on at take-off and off at landing; this fades it with the flight instead.
      */
     shadowOpacity?: () => number;
+    /**
+     * Corner radius (on-screen px) at each end: where it flies from and where it lands.
+     * The copy is scaled as a whole, which scales its corners too, so a 14 px corner
+     * flying at 70% would read as 10 px and jump to 14 on landing. With radii the
+     * corner is blended from one end's to the other's as it flies, in screen pixels.
+     */
+    radii?: { from: number; to: number };
   } = {},
 ): Flight {
   const { W0, H0, radius, shadow, shadowRadius } = opts.metrics ?? measureHero(hero);
@@ -104,6 +138,14 @@ export function createFlight(
   };
   let A = fit(from);
   let B = fit(to);
+  const corners = !!opts.radii && (opts.radii.from > 0 || opts.radii.to > 0);
+  let rA = opts.radii?.from ?? 0;
+  let rB = opts.radii?.to ?? 0;
+  /** The on-screen corner radius at scale sv: from one end's to the other's, along the flight. */
+  const screenRadius = (sv: number) => {
+    const t = A.s === B.s ? 1 : clamp((sv - A.s) / (B.s - A.s), 0, 1);
+    return rA + (rB - rA) * t;
+  };
 
   const el = document.createElement("div");
   el.className = "zoom-clone";
@@ -154,6 +196,14 @@ export function createFlight(
     const left = cx.get() + o.x - (W0 * sv) / 2;
     const top = cy.get() + o.y - (H0 * sv) / 2;
     el.style.transform = `translate(${left}px, ${top}px) scale(${sv})`;
+    // Corners in the copy's own (unscaled) units, so they read right on screen.
+    const r = corners && sv > 0 ? screenRadius(sv) / sv : radius;
+    if (corners) {
+      const value = `${r}px`;
+      copy.style.borderRadius = value;
+      if (liveHost) liveHost.style.borderRadius = value;
+      if (shade) shade.style.borderRadius = value;
+    }
     if (shade) shade.style.opacity = String(clamp(opts.shadowOpacity ? opts.shadowOpacity() : 1, 0, 1));
     // Clip only the sides that are meant to be clipped. A clip-path also cuts
     // anything the hero paints outside its own box (a shadow, a cover swung open
@@ -171,7 +221,7 @@ export function createFlight(
     const ixs = cropX ? ix : -OUTSIDE;
     el.style.clipPath =
       cropX || it > -OUTSIDE || ib > -OUTSIDE
-        ? `inset(${it}px ${ixs}px ${ib}px ${ixs}px${cropX || cropY ? ` round ${radius}px` : ""})`
+        ? `inset(${it}px ${ixs}px ${ib}px ${ixs}px${cropX || cropY ? ` round ${r}px` : ""})`
         : "";
   };
   // Three values change each frame; write the style once, in Motion's render step.
@@ -194,8 +244,10 @@ export function createFlight(
       copy.remove();
     },
     invalidate: () => schedule(),
-    retarget(next) {
+    retarget(next, radius) {
       const sv = s.get();
+      rA = screenRadius(sv); // carry on from the corner it has now
+      if (radius !== undefined) rB = radius;
       A = { s: sv, cx: cx.get(), cy: cy.get(), ...crop(sv) };
       B = fit(next);
       flight.to = B;

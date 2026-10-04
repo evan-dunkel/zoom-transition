@@ -14,7 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { motion, motionValue, useMotionValue, useReducedMotion, type MotionValue } from "motion/react";
 import { REST, clamp, defaultTiming, springTo, type ZoomTiming } from "./springs";
-import { createFlight, measureHero, prepareSnapshot, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
+import { createFlight, measureHero, prepareSnapshot, radiusOf, snapshotOf, type Flight, type HeroMetrics, type Rect } from "./flight";
 import { attachGestures, type DismissEdges, type GestureDismiss, type GesturePaging, type ZoomVelocity } from "./gestures";
 
 /* ------------------------------------------------------------------ types */
@@ -596,6 +596,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     groupOpacity: null as number | null,
     /** flyHome is "visible" for this session: the other cards fade with the visible one. */
     flyVisible: false,
+    /** groupOpacity: the index of the item whose source is hidden on the page. */
+    hiddenAt: 0,
   }).current;
 
   // The shared zoom: the whole pager (card, metadata, neighbours) scales together.
@@ -876,6 +878,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     pre: ReturnType<typeof prepareFlight>,
     /** Heading into the card: the track position its landing spot was worked out for. */
     toCardTrack: number | null = null,
+    /** Corner radius (on-screen px) where it takes off and where it lands. */
+    radii?: { from: number; to: number },
   ) {
     const content = heroContent.current.get(it.id);
     const live = !!content?.live;
@@ -902,6 +906,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
       // The hero's shadow belongs to it in the card, not on the source: it fades in as
       // the card opens and out as it closes, following the item's progress.
       shadowOpacity: () => it.progress.get(),
+      radii,
       // Once it's following scrolled content, the copy is part of that content: hide
       // whatever has scrolled past the card's top or bottom edge, like the rest of it.
       clip: () => {
@@ -1058,24 +1063,32 @@ export function ZoomProvider(props: ZoomProviderProps) {
         // Hidden outright while its card or flight covers it; its share stays 0 after.
         if (hideVisible) el.dataset.zoomHidden = "";
         presenceOf(id).jump(0);
+        S.hiddenAt = j;
       } else {
         delete el.dataset.zoomHidden;
         presenceOf(id).jump(1);
       }
     });
   };
-  /** The visible item changed while open: its source fades out as the last one's fades back in. */
-  const swapVisible = (previous: number, next: number) => {
-    const spec = timing().fade;
-    const prevEl = sources.current.get(S.ids[previous])?.el;
-    if (prevEl) {
-      delete prevEl.dataset.zoomHidden;
-      prevEl.dataset.zoomDimmed = "";
+  /**
+   * The page behind stays exactly as it was while a card is open: changing which piece
+   * is visible (a page turn, scrolling a stream on) doesn't touch it, because tiles
+   * changing in the background while you read are a distraction. On close the swap
+   * happens at once: the visible item's source is hidden (its card is about to land
+   * there) and the one hidden since opening comes back with the rest of the group.
+   */
+  const showHiddenSourceFor = (index: number) => {
+    if (S.groupOpacity === null || S.hiddenAt === index) return;
+    const was = sources.current.get(S.ids[S.hiddenAt])?.el;
+    if (was) delete was.dataset.zoomHidden;
+    presenceOf(S.ids[S.hiddenAt]).jump(1);
+    const now = sources.current.get(S.ids[index])?.el;
+    if (now) {
+      now.dataset.zoomDimmed = "";
+      now.dataset.zoomHidden = "";
     }
-    const nextEl = sources.current.get(S.ids[next])?.el;
-    if (nextEl) nextEl.dataset.zoomDimmed = "";
-    springTo(presenceOf(S.ids[previous]), 1, spec, { restDelta: REST.opacity, speed: speed() });
-    springTo(presenceOf(S.ids[next]), 0, spec, { restDelta: REST.opacity, speed: speed() });
+    presenceOf(S.ids[index]).jump(0);
+    S.hiddenAt = index;
   };
   const unmarkGroup = (el: HTMLElement) => {
     delete el.dataset.zoomDimmed;
@@ -1210,6 +1223,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     const card = cardEls.current.get(id)!;
     const hero = heroFor(id);
     const src = rel(S.origin!.getBoundingClientRect());
+    const srcRadius = radiusOf(S.origin!);
     let heroTarget: Rect | null = null;
     const pre = hero ? prepareFlight(id, hero) : null;
     if (hero) {
@@ -1241,7 +1255,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     it.sLand = z.s;
     if (hero && heroTarget && pre) {
       it.srcFit = fitOf(pre.metrics, src);
-      const f = startFlight(it, hero, src, heroTarget, pre, trackAt(S.index));
+      const f = startFlight(it, hero, src, heroTarget, pre, trackAt(S.index), { from: srcRadius, to: pre.metrics.ownRadius });
       anims.push(
         springTo(f.cx, f.to.cx, T.open, { speed: sp }),
         springTo(f.cy, f.to.cy, T.open, { speed: sp }),
@@ -1335,8 +1349,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     }
     if (S.phase === "open" && latest.current.hideGroupWhileOpen === false && S.groupOpacity === null) hideForOpen();
     if (S.groupOpacity !== null) {
-      if (S.phase === "open" && previous !== i) swapVisible(previous, i);
-      else if (S.phase === "opening") hideForOpen();
+      // While open, the page behind is left alone (see showHiddenSourceFor).
+      if (S.phase === "opening") hideForOpen();
     }
     if (S.flyVisible) followVisible();
     setIndexState(i);
@@ -1446,6 +1460,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
             offset: heroOffset(id),
             heroRect: hero ? rel(hero.getBoundingClientRect(), rootBox) : null,
             dest: src ? rel(src.el.getBoundingClientRect(), rootBox) : null,
+            destRadius: src ? radiusOf(src.el) : 0,
             // Only cards without a flight in the air will need a new one.
             pre: hero && !it.flight ? prepareFlight(id, hero) : null,
             metrics: hero ? measureHero(hero) : null,
@@ -1553,7 +1568,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
           it.flightScroll0 = target === "open" ? scrollerOf(id)?.scrollTop ?? 0 : null;
           it.flightScrollNow = it.flightScroll0 ?? 0;
           it.flightTrack0 = target === "open" ? trackAt(index) : null;
-          f.retarget(heroTarget);
+          f.retarget(heroTarget, target === "sources" ? m.destRadius : m.metrics?.ownRadius ?? 0);
           anims.push(
             springTo(f.cx, f.to.cx, spec, { velocity: vcx, restDelta: restPx, speed: sp }),
             springTo(f.cy, f.to.cy, spec, { velocity: vcy, restDelta: restPx, speed: sp }),
@@ -1561,7 +1576,13 @@ export function ZoomProvider(props: ZoomProviderProps) {
           );
         } else {
           const from = wasLanded ? dest : m.heroRect!;
-          startFlight(it, hero, from, heroTarget, m.pre ?? prepareFlight(id, hero), target === "open" ? trackAt(index) : null);
+          // Corners: the source's on the page; the hero's at whatever scale its card is at.
+          const heroRadius = m.metrics?.ownRadius ?? 0;
+          const radii = {
+            from: wasLanded ? m.destRadius : heroRadius * (m.metrics ? m.heroRect!.w / m.metrics.W0 : 1),
+            to: target === "sources" ? m.destRadius : heroRadius,
+          };
+          startFlight(it, hero, from, heroTarget, m.pre ?? prepareFlight(id, hero), target === "open" ? trackAt(index) : null, radii);
           // The hero was moving with its card: its centre's speed follows from the card's.
           const f = it.flight!;
           const fvx = wasLanded ? 0 : toward(cvx + cvs * (off.x + off.w / 2), f.to.cx - f.cx.get());
@@ -1657,6 +1678,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     // recalculates styles once at the moment of release.
     const active = sources.current.get(S.ids[S.index]);
     const scrolled = !S.reduced && active ? revealSource(active.el) : false;
+    showHiddenSourceFor(S.index); // the visible item's place on the page, ready for it
     setPhase("closing");
     emitAll("closing", interrupted);
     setBackgroundInert(false); // so tapping a source can turn the close around
