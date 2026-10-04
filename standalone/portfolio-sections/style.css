@@ -1,0 +1,59 @@
+/* One continuous card per section. The library marks each stream card with its section
+   and whether it starts or ends it (data-zoom-section-start / -end) and gives the gap
+   between cards as --zoom-gap; the rest is here. */
+
+/* No gap inside a section: each work starts where the last one ends. */
+.zoom-stream .zoom-card[data-zoom-section]:not([data-zoom-section-start]) { margin-top: calc(-1 * var(--zoom-gap)); }
+
+/* Square the joins once open. While a card opens or flies home it's a card of its own,
+   rounded all round; the corners ease square as it settles and round again as it leaves. */
+.zoom-stream .zoom-card,
+.zoom-stream .zoom-card-content { transition: border-radius 240ms ease; }
+.zoom-root[data-phase="open"] .zoom-card[data-zoom-section]:not([data-zoom-section-start]),
+.zoom-root[data-phase="open"] .zoom-card[data-zoom-section]:not([data-zoom-section-start]) .zoom-card-content {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.zoom-root[data-phase="open"] .zoom-card[data-zoom-section]:not([data-zoom-section-end]),
+.zoom-root[data-phase="open"] .zoom-card[data-zoom-section]:not([data-zoom-section-end]) .zoom-card-content {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Where a delineation draws: the top of every work but a section's first. Variants set
+   --join-space (extra room above the work) and style ::before (the divider itself). */
+.zoom-card[data-zoom-section]:not([data-zoom-section-start]) .piece { padding-top: calc(var(--zoom-inset) + var(--join-space, 0px)); }
+.zoom-card[data-zoom-section]:not([data-zoom-section-start]) .zoom-card-content::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* The prototype's switcher. */
+.variants {
+  position: fixed;
+  z-index: 1001; /* above the open stream */
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 0 1px var(--line), 0 8px 24px -8px rgba(0, 0, 0, 0.3);
+  font: 600 13px/1 var(--ui);
+}
+.variants span { flex: none; padding: 0 8px 0 10px; color: var(--muted); white-space: nowrap; }
+.variants button { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.variants button[aria-pressed="true"] { background: var(--text); color: var(--card); }

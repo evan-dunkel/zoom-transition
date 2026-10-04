@@ -1,4 +1,10 @@
-/* Zoom system. Theme with the --zoom-* custom properties.
+/* Zoom system styles, in three parts:
+
+   1. Mechanics. Required. Positioning, scrolling, hit-testing and visibility that the
+      script relies on. Don't override these; nothing here is a matter of taste.
+   2. Default look. Everything visual, driven by --zoom-* custom properties. Theme it
+      with the properties, or override these rules in your own CSS.
+   3. Debug aids (the debug prop).
 
    Corner geometry, set once (design values, e.g. from Figma):
      --zoom-radius   the card's corner (default 28px)
@@ -6,7 +12,13 @@
    Everything else follows: the card's corner, the close button concentric with it, and
    .zoom-concentric for anything inset on the card (and its tile on the page), whose
    corner is radius − inset. Load corners.css as well for smoothed (iOS-style) corners:
-   it sets --zoom-smooth and --zoom-smooth-shape, which every derived corner uses. */
+   it sets --zoom-smooth and --zoom-smooth-shape, which every derived corner uses.
+
+   (The look isn't in a cascade layer on purpose: unlayered page resets such as
+   `button { background: transparent }` would then beat it.) */
+
+/* ================================================================ 1. Mechanics */
+
 .zoom-root {
   position: absolute;
   inset: 0;
@@ -26,25 +38,24 @@
 .zoom-root[data-phase="closing"] .zoom-card,
 .zoom-root[data-phase="closing"] .zoom-clone { pointer-events: auto; cursor: pointer; }
 
-.zoom-dim { position: absolute; inset: 0; background: var(--zoom-dim-color, #000); opacity: 0; pointer-events: none; }
-/* The page behind, filtered (e.g. --zoom-backdrop-filter: blur(18px)). Its own layer, at
-   full strength whenever the card is fully open, however light the dim is. */
-.zoom-backdrop { position: absolute; inset: 0; opacity: 0; pointer-events: none; -webkit-backdrop-filter: var(--zoom-backdrop-filter, none); backdrop-filter: var(--zoom-backdrop-filter, none); }
+/* Opacity comes from script (the dim follows the open; the backdrop is the dim's share
+   of full strength, so a backdrop filter is complete when open however light the dim). */
+.zoom-dim { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.zoom-backdrop { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
 .zoom-zoomer { position: absolute; inset: 0; transform-origin: 0 0; }
 .zoom-track { position: absolute; top: 0; left: 0; height: 100%; }
 
-/* The card itself is a transparent, rounded clip. Its visible surface (background
-   and rounded corners) belongs to .zoom-card-content, inside the scroller, so the
-   browser's own overscroll bounce moves the whole card, not just what's on it:
-   no seam between the card's edge and its content. */
+/* The card itself is a transparent clip. Its visible surface (background and corners)
+   belongs to .zoom-card-content, inside the scroller, so the browser's own overscroll
+   bounce moves the whole card, not just what's on it: no seam between the card's edge
+   and its content. */
 .zoom-card {
   position: absolute;
   transform-origin: 0 0;
   overflow: hidden;
-  border-radius: var(--zoom-card-radius, calc(var(--zoom-radius, 28px) * var(--zoom-smooth, 1)));
-  corner-shape: var(--zoom-corner-shape, var(--zoom-smooth-shape, round));
-  color: var(--zoom-card-color, inherit);
 }
+/* The card takes focus (so the dialog has it) without drawing a ring of its own. */
+.zoom-card:focus { outline: none; }
 .zoom-card-scroll {
   height: 100%;
   overflow-y: auto;
@@ -58,10 +69,24 @@
    the next swipe turns the page; a bounce kept the content moving at the edge, so a
    new swipe there was hard to tell from the old one and the page wouldn't turn. */
 .zoom-vertical .zoom-card-scroll { overscroll-behavior-y: none; }
+.zoom-card-content {
+  position: relative;
+  display: flow-root; /* keeps the destination's margins inside the card (they'd escape in a stream) */
+  min-height: 100%;
+  overflow: clip; /* keep the content inside the card's corners when it bounces */
+}
+/* A zero-height sticky bar at the top of the content: the close button stays put
+   while you scroll, and moves with the card when it bounces. In a stream it fades
+   out as its card scrolls away (opacity set from script), rather than being cut off
+   by the card's edge. */
+.zoom-close-bar { position: sticky; top: 0; height: 0; z-index: 6; }
 
 /* Stream (layout="stream"): one natively scrolled column of cards, each as tall as its
    content. The cards sit in the column's flow; the column is the only scroller, so
-   each card's close bar sticks to the top of the screen while that card is in view. */
+   each card's close bar sticks to the top of the screen while that card is in view.
+   The column sets --zoom-gap (geometry.gap). Cards carry data-zoom-section and, at the
+   ends of a section, data-zoom-section-start / -end: enough to join a section's cards
+   into one surface in your own CSS. */
 .zoom-stream {
   position: absolute;
   inset: 0;
@@ -79,12 +104,37 @@
 .zoom-stream::-webkit-scrollbar { display: none; }
 .zoom-stream .zoom-card { position: relative; flex: none; overflow: clip; }
 .zoom-stream .zoom-card-scroll { height: auto; overflow: visible; }
-/* Section titles between a stream's cards (renderSectionTitle; style .zoom-stream-title). */
+/* Section titles between a stream's cards (renderSectionTitle). */
 .zoom-stream-title-row { flex: none; }
-.zoom-stream-title { margin: 0; }
 /* Hold still while a card is pulled sideways, and while cards fly home. */
 .zoom-dragging .zoom-stream,
 .zoom-root[data-phase="closing"] .zoom-stream { overflow-y: hidden; }
+
+.zoom-flight { position: absolute; inset: 0; pointer-events: none; }
+.zoom-clone { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+
+.zoom-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+[data-zoom-hidden] { visibility: hidden !important; }
+/* groupOpacity: the rest of the group, dimmed behind an open card. */
+[data-zoom-dimmed] { opacity: var(--zoom-group-opacity, 1); }
+
+/* ================================================================ 2. Default look */
+
+.zoom-dim { background: var(--zoom-dim-color, #000); }
+/* The page behind, filtered (e.g. --zoom-backdrop-filter: blur(18px)). */
+.zoom-backdrop { -webkit-backdrop-filter: var(--zoom-backdrop-filter, none); backdrop-filter: var(--zoom-backdrop-filter, none); }
+
+.zoom-card {
+  border-radius: var(--zoom-card-radius, calc(var(--zoom-radius, 28px) * var(--zoom-smooth, 1)));
+  corner-shape: var(--zoom-corner-shape, var(--zoom-smooth-shape, round));
+  color: var(--zoom-card-color, inherit);
+}
+.zoom-card-content {
+  border-radius: var(--zoom-card-radius, calc(var(--zoom-radius, 28px) * var(--zoom-smooth, 1)));
+  corner-shape: var(--zoom-corner-shape, var(--zoom-smooth-shape, round));
+  background: var(--zoom-card-bg, #fff);
+}
 
 /* Concentric with the card's corner by default: its centre sits on the corner's centre
    (inset = --zoom-radius − size / 2). --zoom-close-inset overrides. */
@@ -104,37 +154,23 @@
   cursor: pointer;
 }
 .zoom-close::before { content: ""; position: absolute; inset: -7px; } /* 44px hit area */
-/* The card takes focus (so the dialog has it) without drawing a ring of its own. */
-.zoom-card:focus { outline: none; }
 .zoom-close:focus-visible { outline: 2px solid var(--zoom-focus, currentColor); outline-offset: 2px; }
 
-.zoom-flight { position: absolute; inset: 0; pointer-events: none; }
-.zoom-clone { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+/* The default section title (renderSectionTitle replaces it). */
+.zoom-stream-title { margin: 0; }
 
-.zoom-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-
-[data-zoom-hidden] { visibility: hidden !important; }
-/* groupOpacity: the rest of the group, dimmed behind an open card. */
-[data-zoom-dimmed] { opacity: var(--zoom-group-opacity, 1); }
-
-.zoom-card-content {
-  position: relative;
-  display: flow-root; /* keeps the destination's margins inside the card (they'd escape in a stream) */
-  min-height: 100%;
-  overflow: clip; /* keep the content inside the rounded corners when it bounces */
-  border-radius: var(--zoom-card-radius, calc(var(--zoom-radius, 28px) * var(--zoom-smooth, 1)));
-  corner-shape: var(--zoom-corner-shape, var(--zoom-smooth-shape, round));
-  background: var(--zoom-card-bg, #fff);
+/* For anything inset on a card by --zoom-inset (a cover image, an icon), and the tile it
+   flies from on the page: the corner concentric with the card's. */
+.zoom-concentric {
+  border-radius: calc((var(--zoom-radius, 28px) - var(--zoom-inset, 10px)) * var(--zoom-smooth, 1));
+  corner-shape: var(--zoom-smooth-shape, round);
 }
-/* A zero-height sticky bar at the top of the content: the close button stays put
-   while you scroll, and moves with the card when it bounces. In a stream it fades
-   out as its card scrolls away (opacity set from script), rather than being cut off
-   by the card's edge. */
-.zoom-close-bar { position: sticky; top: 0; height: 0; z-index: 6; }
 
-/* Debug: wheel-dismiss edge zones (debug prop). If any of a band is on screen, a
-   swipe toward that edge can close the card. Brighter while the content is in the
-   zone; brightest while a swipe is armed. */
+/* ================================================================ 3. Debug aids */
+
+/* Wheel-dismiss edge zones (debug prop). If any of a band is on screen, a swipe toward
+   that edge can close the card. Brighter while the content is in the zone; brightest
+   while a swipe is armed. */
 .zoom-debug-edge {
   position: absolute;
   left: 0;
@@ -162,10 +198,3 @@
 .zoom-root[data-armed-bottom] .zoom-card:not([inert]) .zoom-debug-bottom { background-color: rgba(255, 45, 120, 0.38); }
 .zoom-root[data-armed-top] .zoom-card:not([inert]) .zoom-debug-top span::after,
 .zoom-root[data-armed-bottom] .zoom-card:not([inert]) .zoom-debug-bottom span::after { content: " · armed"; }
-
-/* For anything inset on a card by --zoom-inset (a cover image, an icon), and the tile it
-   flies from on the page: the corner concentric with the card's. */
-.zoom-concentric {
-  border-radius: calc((var(--zoom-radius, 28px) - var(--zoom-inset, 10px)) * var(--zoom-smooth, 1));
-  corner-shape: var(--zoom-smooth-shape, round);
-}

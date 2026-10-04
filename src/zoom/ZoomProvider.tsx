@@ -479,6 +479,11 @@ type ZoomCardProps = {
   zones: { slop: number; edges: DismissEdges } | null;
   makeContext: (id: string, j: number, active: boolean) => CardContextValue;
   setCardEl: (id: string, el: HTMLElement | null) => void;
+  /** Stream: the card's section, and whether it starts or ends it (for styling joins).
+   *  Plain values, so the memo still holds. */
+  section?: string;
+  sectionStart?: boolean;
+  sectionEnd?: boolean;
 };
 /**
  * One page of the pager. Memoised, so paging (which changes which card is active)
@@ -500,6 +505,9 @@ const ZoomCard = memo(function ZoomCard({
   zones,
   makeContext,
   setCardEl,
+  section,
+  sectionStart,
+  sectionEnd,
 }: ZoomCardProps) {
   const cardContext = useMemo(() => makeContext(id, j, active), [makeContext, id, j, active]);
   const heroContext = useMemo(
@@ -513,6 +521,9 @@ const ZoomCard = memo(function ZoomCard({
       ref={ref}
       className="zoom-card"
       data-zoom-id={id}
+      data-zoom-section={section}
+      data-zoom-section-start={sectionStart ? "" : undefined}
+      data-zoom-section-end={sectionEnd ? "" : undefined}
       aria-label={label}
       inert={!active && !layout.stream}
       tabIndex={-1}
@@ -2067,15 +2078,17 @@ export function ZoomProvider(props: ZoomProviderProps) {
               className={layout.stream ? "zoom-stream" : "zoom-track"}
               style={
                 layout.stream
-                  ? { paddingTop: layout.top, paddingBottom: layout.top, rowGap: layout.gap }
+                  ? { paddingTop: layout.top, paddingBottom: layout.top, rowGap: layout.gap, ["--zoom-gap" as string]: `${layout.gap}px` }
                   : layout.vertical
                     ? { y: track }
                     : { x: track }
               }
             >
               {session.ids.map((id, j) => {
-                const section = layout.stream ? sources.current.get(id)?.section : undefined;
-                const startsSection = !!section && section !== (j > 0 ? sources.current.get(session.ids[j - 1])?.section : undefined);
+                const sectionOf = (k: number) => (k >= 0 && k < session.ids.length ? sources.current.get(session.ids[k])?.section : undefined);
+                const section = layout.stream ? sectionOf(j) : undefined;
+                const startsSection = !!section && section !== sectionOf(j - 1);
+                const endsSection = !!section && section !== sectionOf(j + 1);
                 return (
                 <Fragment key={id}>
                 {startsSection && (
@@ -2099,6 +2112,9 @@ export function ZoomProvider(props: ZoomProviderProps) {
                   zones={zones}
                   makeContext={cardContext}
                   setCardEl={setCardEl}
+                  section={section}
+                  sectionStart={startsSection}
+                  sectionEnd={endsSection}
                 />
                 </Fragment>
                 );

@@ -27,8 +27,12 @@ and closing sends every card back to its own source.
 - `standalone/portfolio-icons/` — a second prototype: every piece opens into one stream
   under section titles (Air Apps, personal projects, writing, then About with a call to
   action). Air Apps cards lead with a large image; the rest lead with an icon beside the
-  title (→ `dist/portfolio-icons.html`).
-  Both are built by `standalone/build.py <folder>`.
+  title (→ `dist/portfolio-icons.html`). Its content lives in `content.html` and its settings
+  in `mount.tsx`, so other prototypes can share them.
+- `standalone/portfolio-sections/` — the same content with each section opening as one
+  continuous card, and switchable delineations between works (→ `dist/portfolio-sections.html`).
+  All are built by `standalone/build.py <folder>`, which inlines linked stylesheets, the
+  script and SVG images, and `<!-- include path -->` directives (shared markup).
 - `astro-example/` — how it drops into an Astro portfolio
 
 Requires `react`, `react-dom` and `motion`.
@@ -113,6 +117,15 @@ focus and the progress signal. Your project owns what things look like and any
 motion *inside* them (like the book opening), the data, the theme values, and any
 tuning UI. Book-store-specific feel lives in the demo's props, not the library.
 
+`zoom.css` keeps the two apart in three labelled parts: **mechanics** (required: positioning,
+scrolling, hit-testing and visibility the script relies on; don't override), **default
+look** (everything visual, driven by `--zoom-*` properties; theme or override freely), and
+debug aids. The look isn't in a cascade layer on purpose: unlayered page resets such as
+`button { background: transparent }` (Tailwind v3's preflight) would then beat it. The
+library also hands the page information rather than looks where a layout needs it:
+`data-zoom-section`, `data-zoom-section-start` / `-end` on stream cards, `--zoom-gap`,
+`data-phase` on the root.
+
 ## Astro usage
 
 React context doesn't cross islands, so either put the whole gallery in one
@@ -186,6 +199,10 @@ React island, or keep the markup in Astro and use one small island with `scan`
   ```tsx
   <ZoomProvider layout="stream" flyHome="visible" groupOpacity={0.35} ...>
   ```
+
+  Stream cards carry `data-zoom-section`, and `data-zoom-section-start` / `-end` at a
+  section's first and last card; the column sets `--zoom-gap`. That's enough to join a
+  section into one card in your own CSS (see `standalone/portfolio-sections`).
 
   Sections: give sources a section (`data-zoom-section="Writing"`, or `ZoomSource`'s
   `section` prop) and the stream shows that title above the first card of each section,

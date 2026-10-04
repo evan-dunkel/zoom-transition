@@ -43,7 +43,10 @@ standalone/portfolio/ the portfolio at its simplest (plain HTML + templates + on
 standalone/portfolio-icons/ a second portfolio prototype: one stream for every section (section
                      titles between cards), image-led Air Apps cards, icon-led cards for the
                      rest, About + CTA last; dist/portfolio-icons.html
-standalone/build.py  builds either folder into one self-contained HTML file (+ an -artifact variant)
+standalone/portfolio-sections/ the same content (included from portfolio-icons/content.html, settings
+                     from its mount.tsx), each section one continuous card, switchable delineations
+standalone/build.py  builds a folder into one self-contained HTML file (+ an -artifact variant):
+                     inlines linked stylesheets, the script, SVGs and <!-- include path --> markup
 astro-example/       untested sketch: Astro page + ZoomRoot island using `scan` + templates
 test/scan.*          plain-HTML (Astro-style) harness for scan + templates (fixed overlay)
 tests/e2e/           Playwright test suite (`npm test`), asserting (see §9)
@@ -217,6 +220,10 @@ behind is live and a tap can reopen).
 
 ### Corners and backdrop (library CSS)
 
+`zoom.css` is in three labelled parts: mechanics (required), default look (all visual,
+`--zoom-*` driven) and debug aids. Selectors were split, not changed, so specificity is as
+before (pixel-identical). Not a cascade layer: unlayered page resets would beat it.
+
 `zoom.css` derives corner geometry from `--zoom-radius` and `--zoom-inset` (design values):
 the card's `border-radius` is `--zoom-card-radius` if set, else radius × `--zoom-smooth`;
 `corner-shape` is `--zoom-corner-shape`, else `--zoom-smooth-shape`; the close button's inset
@@ -239,6 +246,10 @@ complete when open even with a light dim (opacity on one element would fade the 
 ```
 The surface lives inside the scroller so the browser's native overscroll bounce
 moves the whole card (no seam). Do not move the background back onto `.zoom-card`.
+In a stream, the card also carries `data-zoom-section` and, at a section's ends,
+`data-zoom-section-start` / `-end` (plain props on the memoised `ZoomCard`, so paging still
+re-renders only two cards); the track sets `--zoom-gap`. Section titles are siblings of the
+cards in the track (`[data-zoom-section-title]`).
 
 ### History (`history` prop)
 - `session`: one entry on open; paging replaces the URL; Back closes.
@@ -468,6 +479,9 @@ See README for details.
   one stream across sections with titles in the page's style, the opening title in view,
   both card styles' geometry, one-line metadata, the About CTA's copy button, closing
   across sections.
+  `standalone-portfolio-sections.spec.ts`: section markers, joined cards (touching, square
+  joins, rounded ends), a flying card rounded again, the delineation switcher, and fading
+  text never touching heroes.
   `trackpad-paging.spec.ts` is timing-sensitive under load (fails occasionally with
   `--repeat-each`, before and after these changes).
   Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to reuse an installed Chromium.

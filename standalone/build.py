@@ -14,17 +14,23 @@ dist.mkdir(exist_ok=True)
 subprocess.run(["npx", "esbuild", str(here / "island.tsx"), "--bundle", "--minify", "--format=iife", "--target=es2020",
                 '--define:process.env.NODE_ENV="production"', f"--outfile={dist / (name + '.js')}"], check=True, cwd=root)
 
-html = (here / "index.html").read_text()
+def svg(path):
+    return f'src="data:image/svg+xml;base64,{base64.b64encode(path.read_bytes()).decode()}"'
+
+# <!-- include ../other/content.html --> shares markup between prototypes. Its images
+# resolve from the included file's own folder.
+def include(m):
+    path = (here / m.group(1)).resolve()
+    return re.sub(r'src="([^"]+\.svg)"', lambda n: svg(path.parent / n.group(1)), path.read_text())
+
+html = re.sub(r"<!-- include (\S+) -->", include, (here / "index.html").read_text())
 js = (dist / (name + ".js")).read_text().replace("</script", "<\\/script")
 
 # Every local stylesheet (zoom.css, corners.css, style.css) is inlined where it's linked.
 html = re.sub(r'<link rel="stylesheet" href="(?!https?:)([^"]+\.css)">', lambda m: f"<style>\n{(here / m.group(1)).read_text()}\n</style>", html)
 html = html.replace('<script src="island.js"></script>', f"<script>\n{js}\n</script>")
 
-def inline(m):
-    data = (here / m.group(1)).read_bytes()
-    return f'src="data:image/svg+xml;base64,{base64.b64encode(data).decode()}"'
-html = re.sub(r'src="([^"]+\.svg)"', inline, html)
+html = re.sub(r'src="([^"]+\.svg)"', lambda m: svg(here / m.group(1)), html)
 assert "<style>" in html and "<script>" in html and "<link rel=\"stylesheet\" href=\"." not in html, "index.html must link its stylesheets and island.js as the portfolio's does"
 
 (dist / (name + ".html")).write_text(html)
