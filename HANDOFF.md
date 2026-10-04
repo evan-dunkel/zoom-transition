@@ -487,6 +487,16 @@ See README for details.
   resize mid-close re-aims the cards like a page scroll does (`reaimSoon`). Guarded by
   "if the page moves mid-close ... the card still lands on its source" (flight-invariants;
   70px off without the re-aim). Diagnostics log each close frame by frame.
+  The next log showed the rest: 115ms into the close the viewer switched the page's
+  viewport 812→742 and moved the page's frame on screen with it, so in the page's
+  coordinates the tile moved up 70px while on screen it stayed put; the overlay, fixed to
+  that frame, jumped 70px down on screen and the re-aim glided it back. Now `followPage`
+  tells the two apart: a source moving with a viewport resize means the page moved under
+  the overlay at once, so the overlay's moving layers (zoomer, flight layer) get a CSS
+  `translate` by the same amount in that frame (`S.shift`; `rel()` subtracts it, so every
+  measurement stays in the shifted frame and springs are untouched); a move without a
+  resize is a scroll and re-aims. Cleared at closeDone and openDone. Guarded by "if a host
+  re-lays out the page mid-close ... without a jump" (68px jump without the shift).
 - Close buttons: the button sits on the hero's corner, under the hero's flying copy, so
   any fade during a flight is hidden and it popped in at landing. zoom.css hides it while
   `data-phase` is opening/closing and fades it in once landed (`--zoom-close-fade`, 200ms);

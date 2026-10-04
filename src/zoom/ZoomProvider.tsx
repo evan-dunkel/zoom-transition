@@ -621,6 +621,14 @@ export function ZoomProvider(props: ZoomProviderProps) {
     fromPop: false,
     /** The page's own overflow and scrollbar-gutter styles while we lock scrolling. */
     scrollLock: null as { overflow: string; gutter: string } | null,
+    /**
+     * How far the page has moved under the overlay at once during a close (a host
+     * re-laying it out, the viewport changing size), applied to the overlay's moving
+     * layers so nothing jumps on screen. rel() works in the shifted frame.
+     */
+    shift: { x: 0, y: 0 },
+    /** While closing: a source on the page, and where it was last seen (viewport px). */
+    pageRef: null as { el: HTMLElement; left: number; top: number; vw: number; vh: number } | null,
     sessionKey: 0,
     /** Portalled into document.body as a fixed overlay (no container given). */
     fixed: false,
@@ -868,8 +876,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
   /** A movement of the track, as screen x/y. */
   const alongTrack = (d: number) => (S.L!.vertical ? { x: 0, y: d } : { x: d, y: 0 });
   const rel = (r: DOMRect, root: DOMRect = rootRef.current!.getBoundingClientRect()): Rect => ({
-    x: r.left - root.left,
-    y: r.top - root.top,
+    x: r.left - root.left - S.shift.x,
+    y: r.top - root.top - S.shift.y,
     w: r.width,
     h: r.height,
   });
@@ -1212,6 +1220,22 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const releaseScroll = () => {
     if (S.scrollLock) document.documentElement.style.overflow = S.scrollLock.overflow;
   };
+  /** Closing: start watching a source, to tell the page moving under the overlay. */
+  const watchPage = (el: HTMLElement | null) => {
+    if (!el) return (S.pageRef = null);
+    const r = el.getBoundingClientRect();
+    const vv = window.visualViewport;
+    S.pageRef = { el, left: r.left, top: r.top, vw: vv?.width ?? innerWidth, vh: vv?.height ?? innerHeight };
+  };
+  const applyShift = () => {
+    const t = S.shift.x || S.shift.y ? `${S.shift.x}px ${S.shift.y}px` : "";
+    for (const el of [zoomerRef.current, flightRef.current]) if (el) el.style.translate = t;
+  };
+  const clearShift = () => {
+    S.shift = { x: 0, y: 0 };
+    S.pageRef = null;
+    applyShift();
+  };
   /** A close turned back into an open: lock again. */
   const relockScroll = () => {
     if (S.scrollLock) document.documentElement.style.overflow = "hidden";
@@ -1429,6 +1453,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
   const gesturesRef = useRef<{ refresh(): void } | null>(null);
 
   const openDone = () => {
+    clearShift(); // a close turned around after the page moved (rare): settle in the plain frame
     streamRef.current?.querySelectorAll<HTMLElement>("[data-zoom-section-title]").forEach((el) => (el.style.transform = ""));
     S.mode = "zoom";
     // Drag progress is measured against the visible item's own source.
@@ -1859,6 +1884,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     emitAll("closing", interrupted);
     setBackgroundInert(false); // so tapping a source can turn the close around
     releaseScroll();
+    watchPage(active?.el ?? null);
     const gen = ++S.gen;
 
     if (S.reduced) {
@@ -1940,6 +1966,7 @@ export function ZoomProvider(props: ZoomProviderProps) {
     });
     setBackgroundInert(false);
     unlockScroll();
+    clearShift();
     S.offDim?.();
     S.offDim = null;
     S.mode = "zoom";
@@ -2038,7 +2065,31 @@ export function ZoomProvider(props: ZoomProviderProps) {
         it.flight.invalidate();
       });
       if (e.target instanceof Node && root.contains(e.target)) return;
-      reaimSoon();
+      followPage();
+    };
+    /**
+     * Closing, the page moved. If the viewport changed size with it, the page moved under
+     * the overlay at once (a host re-laying it out, as the claude.ai viewer does when a
+     * page's scrolling is released; the overlay's own frame moves on screen with it):
+     * shift everything in flight by the same amount, in this frame, so nothing moves on
+     * screen and the targets still hold. Otherwise it was scrolled: re-aim at the sources.
+     */
+    const followPage = () => {
+      if (S.phase !== "closing" || S.mode !== "cards" || S.reduced) return;
+      const ref = S.pageRef;
+      if (!ref) return reaimSoon();
+      const r = ref.el.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const vw = vv?.width ?? innerWidth;
+      const vh = vv?.height ?? innerHeight;
+      const dx = r.left - ref.left;
+      const dy = r.top - ref.top;
+      const resized = Math.abs(vw - ref.vw) > 0.5 || Math.abs(vh - ref.vh) > 0.5;
+      Object.assign(ref, { left: r.left, top: r.top, vw, vh });
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+      if (!resized) return reaimSoon();
+      S.shift = { x: S.shift.x + dx, y: S.shift.y + dy };
+      applyShift();
     };
     const reaimSoon = () => {
       if (S.phase !== "closing" || S.mode !== "cards" || S.reduced || reaim) return;
@@ -2049,8 +2100,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
     };
     // The viewport changing size mid-close (a host re-laying out the page, toolbars
     // showing) moves the sources too.
-    window.addEventListener("resize", reaimSoon);
-    window.visualViewport?.addEventListener("resize", reaimSoon);
+    window.addEventListener("resize", followPage);
+    window.visualViewport?.addEventListener("resize", followPage);
     document.addEventListener("scroll", onAnyScroll, { capture: true, passive: true });
     // Back and Forward.
     const onPop = (e: PopStateEvent) => {
@@ -2097,8 +2148,8 @@ export function ZoomProvider(props: ZoomProviderProps) {
       window.removeEventListener("keydown", onKeyInput, true);
       window.removeEventListener("pointerdown", onPointerInput, true);
       window.removeEventListener("popstate", onPop);
-      window.removeEventListener("resize", reaimSoon);
-      window.visualViewport?.removeEventListener("resize", reaimSoon);
+      window.removeEventListener("resize", followPage);
+      window.visualViewport?.removeEventListener("resize", followPage);
       document.removeEventListener("scroll", onAnyScroll, { capture: true });
       cancelAnimationFrame(reaim);
       ro.disconnect();

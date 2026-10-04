@@ -139,7 +139,7 @@ test("a backdrop filter is at full strength when open, however light the dim", a
   expect(await page.evaluate(() => Number(getComputedStyle(document.querySelector(".zoom-backdrop")!).opacity))).toBe(0);
 });
 
-test("if the page moves mid-close (a host re-laying it out), the card still lands on its source", async ({ page }) => {
+test("if the page moves mid-close without the viewport changing (scrolled), the card re-aims and lands on its source", async ({ page }) => {
   await page.click('[data-zoom-source="a"]');
   await expect.poll(() => phase(page)).toBe("open");
   await page.evaluate(() => {
@@ -167,4 +167,37 @@ test("if the page moves mid-close (a host re-laying it out), the card still land
   const frames: number[] = await page.evaluate(() => (window as any).__landing);
   const tile = await page.locator('[data-zoom-source="a"]').evaluate((el) => el.getBoundingClientRect().top);
   expect(Math.abs(frames[frames.length - 1] - tile)).toBeLessThan(2); // lands where the tile is now
+});
+
+test("if a host re-lays out the page mid-close (viewport resized), the cards move with it, without a jump", async ({ page }) => {
+  await page.click('[data-zoom-source="a"]');
+  await expect.poll(() => phase(page)).toBe("open");
+  await page.evaluate(() => {
+    const frames: { clone: number; tile: number }[] = [];
+    (window as any).__f = frames;
+    const tick = () => {
+      const clone = document.querySelector(".zoom-clone-window");
+      const tile = document.querySelector('[data-zoom-source="a"]')!;
+      if (clone) frames.push({ clone: clone.getBoundingClientRect().top, tile: tile.getBoundingClientRect().top });
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(80);
+  // What the claude.ai viewer does on a phone: the page's viewport gets 70px shorter and
+  // its content moves up 70px in it, in one go (on screen the page stays put).
+  await page.evaluate(() => {
+    document.querySelector<HTMLElement>("main")!.style.marginTop = "-70px";
+    const h = (visualViewport?.height ?? innerHeight) - 70;
+    if (visualViewport) Object.defineProperty(visualViewport, "height", { get: () => h, configurable: true });
+    Object.defineProperty(window, "innerHeight", { get: () => h, configurable: true });
+    dispatchEvent(new Event("resize"));
+  });
+  await expect.poll(() => phase(page)).toBe("idle");
+  const frames: { clone: number; tile: number }[] = await page.evaluate(() => (window as any).__f);
+  const gaps = frames.map((f) => f.clone - f.tile);
+  const steps = gaps.slice(1).map((g, i) => Math.abs(g - gaps[i]));
+  expect(Math.max(...steps)).toBeLessThan(40); // no 70px jump relative to the page
+  expect(Math.abs(gaps[gaps.length - 1])).toBeLessThan(2); // and it lands on the tile
 });
