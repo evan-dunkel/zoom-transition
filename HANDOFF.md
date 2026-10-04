@@ -472,7 +472,13 @@ See README for details.
   WebKitWebDriver, since Playwright's WebKit download host is blocked), with cold caches,
   or with long tasks injected into the first frames. The first-open screenshot showed the
   flying copy still up, so that open hadn't finished. `standalone/diagnostics` logs the
-  zoom's state after each tap for reading on the device. Open.
+  zoom's state after each tap for reading on the device. Resolved by its log (iPhone,
+  screen 874): with the page at scroll 0 the claude.ai artifact viewer gives the page an
+  812px viewport that runs 70px under its translucent header; once the page is scrolled
+  it gives 742px, below the header. Our layout was identical in every open (overlay at
+  the viewport's top, title 8px down, column unscrolled, open done in under 1.5s), so the
+  title sat under the viewer's header only at scroll 0. Viewer chrome, not the library;
+  a site without the viewer doesn't have it.
 - Close buttons: the button sits on the hero's corner, under the hero's flying copy, so
   any fade during a flight is hidden and it popped in at landing. zoom.css hides it while
   `data-phase` is opening/closing and fades it in once landed (`--zoom-close-fade`, 200ms);
