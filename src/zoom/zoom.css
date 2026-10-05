@@ -45,6 +45,9 @@
    page taller: Safari would let it scroll into the overhang, then snap back on close. */
 .zoom-page > :is(.zoom-dim, .zoom-backdrop) { top: -30vh; bottom: calc(-1 * var(--zoom-overscan)); }
 .zoom-page .zoom-stream { bottom: calc(-1 * var(--zoom-overscan)); }
+/* Cards lay out in the page's content width, beside its scrollbar's gutter (which the
+   overlay itself still covers): set from script as --zoom-gutter. */
+.zoom-page :is(.zoom-zoomer, .zoom-shared-close) { right: var(--zoom-gutter, 0px); }
 .zoom-root[data-open] { visibility: visible; pointer-events: auto; }
 /* While closing, the page behind is live again (tap a source to turn the close
    around); only the cards and covers on their way home catch taps. */
@@ -98,6 +101,9 @@
    out as its card scrolls away (opacity set from script), rather than being cut off
    by the card's edge. */
 .zoom-close-bar { position: sticky; top: 0; height: 0; z-index: 6; }
+/* One viewport control for a continuous modal sheet, outside the scrolled cards. */
+.zoom-shared-close { position: absolute; inset: 0 0 auto; }
+.zoom-root:is([data-phase="opening"], [data-phase="closing"]) .zoom-shared-close { pointer-events: none; }
 
 /* Stream (layout="stream"): one natively scrolled column of cards, each as tall as its
    content. The cards sit in the column's flow; the column is the only scroller, so

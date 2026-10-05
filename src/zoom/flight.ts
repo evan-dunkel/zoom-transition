@@ -7,6 +7,9 @@ export type Rect = { x: number; y: number; w: number; h: number };
 type Fit = { s: number; cx: number; cy: number; vw: number; vh: number };
 
 export type Flight = {
+  /** Painted image window, including its crop and scroll offset. Updated in render. */
+  bounds(): Rect;
+  element: HTMLElement;
   cx: MotionValue<number>;
   cy: MotionValue<number>;
   s: MotionValue<number>;
@@ -90,9 +93,40 @@ export function prepareSnapshot(hero: HTMLElement) {
   frozenCache.set(hero, { node, w, h });
   return node;
 }
-export function snapshotOf(hero: HTMLElement, live: boolean) {
-  return live ? (hero.cloneNode(true) as HTMLElement) : (prepareSnapshot(hero).cloneNode(true) as HTMLElement);
+export function snapshotOf(hero: HTMLElement, live: boolean, imageSource = hero) {
+  const copy = live ? (hero.cloneNode(true) as HTMLElement) : (prepareSnapshot(hero).cloneNode(true) as HTMLElement);
+  if (!live) {
+    const images = (el: HTMLElement) => el instanceof HTMLImageElement ? [el] : [...el.querySelectorAll("img")];
+    const originals = images(imageSource);
+    images(copy).forEach((image, index) => {
+      const original = originals[index];
+      if (!original?.complete || !original.naturalWidth || !original.currentSrc) return;
+      // Freeze the already-painted resource as well as its styles. Safari can reload
+      // a cloned responsive image and leave it blank for the entire short flight.
+      image.closest("picture")?.querySelectorAll("source").forEach(source => source.remove());
+      image.removeAttribute("srcset");
+      image.removeAttribute("sizes");
+      image.loading = "eager";
+      image.decoding = "sync";
+      image.src = original.currentSrc;
+    });
+  }
+  return copy;
 }
+
+/** A decoding hint does not guarantee pixels are ready when a new copy is inserted. */
+export async function decodeImages(root: HTMLElement) {
+  const images = root instanceof HTMLImageElement ? [root] : [...root.querySelectorAll("img")];
+  await Promise.all(images.map(image => {
+    image.loading = "eager";
+    return image.decode().catch(() => {}); // Broken images retain their normal fallback.
+  }));
+}
+
+/** Keep the outgoing layer until the revealed replacement has had a paint opportunity. */
+export const afterPaint = () => new Promise<void>(resolve => {
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+});
 
 /**
  * Flies a copy of the destination's hero from one rect to another. The copy is
@@ -110,6 +144,8 @@ export function createFlight(
     live?: { className?: string };
     metrics?: HeroMetrics;
     snapshot?: HTMLElement;
+    /** Preserve the source images' hover/focus opacity at take-off, then release it. */
+    imageFade?: { from: number[]; duration: number };
     /** Added on top of the spring's position every frame (e.g. to follow content scrolled mid-flight). */
     offset?: () => { x: number; y: number };
     /** A vertical band (in the layer's coordinates) to clip the copy to, or null for none. */
@@ -166,6 +202,21 @@ export function createFlight(
   copy.style.top = "0";
   copy.style.width = `${W0}px`;
   copy.style.height = `${H0}px`;
+  const imageAnimations: Animation[] = [];
+  if (opts.imageFade && !opts.live) {
+    const images = copy.matches("img") ? [copy] : [...copy.querySelectorAll("img")];
+    images.forEach((image, index) => {
+      const from = opts.imageFade!.from[index];
+      // The snapshot already holds the destination's computed opacity; no layout read.
+      const to = Number(image.style.opacity || 1);
+      if (from === undefined || Math.abs(from - to) < 0.001) return;
+      imageAnimations.push(image.animate([{ opacity: from }, { opacity: to }], {
+        duration: opts.imageFade!.duration,
+        easing: "ease-out",
+        fill: "backwards",
+      }));
+    });
+  }
   // A window over the copy. Normally it's the whole box and clips nothing (so a cover
   // swung open in 3D, or a glow, can overhang). When the copy is cropped to the
   // source's shape (a square thumbnail opening into a wide image) the window shrinks
@@ -221,6 +272,7 @@ export function createFlight(
       ? { ix: Math.max(0, (W0 - vw / sv) / 2), iy: Math.max(0, (H0 - vh / sv) / 2), vw, vh }
       : { ix: 0, iy: 0, vw, vh };
   };
+  let bounds: Rect = from;
   const write = () => {
     scheduled = false;
     const sv = s.get();
@@ -241,6 +293,7 @@ export function createFlight(
     const cropping = ix > 0.5 || iy > 0.5;
     const offX = cropping ? ix : 0;
     const offY = cropping ? iy : 0;
+    bounds = { x: left + offX * sv, y: top + offY * sv, w: (W0 - 2 * offX) * sv, h: (H0 - 2 * offY) * sv };
     const inset = `${offY}px ${offX}px`;
     win.style.inset = inset;
     win.style.overflow = cropping ? "hidden" : "";
@@ -276,6 +329,8 @@ export function createFlight(
   write();
 
   const flight: Flight = {
+    bounds: () => bounds,
+    element: el,
     cx,
     cy,
     s,
@@ -295,6 +350,7 @@ export function createFlight(
       flight.to = B;
     },
     destroy() {
+      imageAnimations.forEach(animation => animation.cancel());
       unsubscribe.forEach((u) => u());
       cancelFrame(write);
       [cx, cy, s].forEach((v) => v.stop());

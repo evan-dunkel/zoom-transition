@@ -107,6 +107,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   let suppressClickUntil = 0;
 
   const start = (x: number, y: number, t: number, type: "touch" | "mouse", target: EventTarget | null) => {
+    if (target instanceof Element && target.closest('[data-zoom-controls]')) return;
     // A touch can begin while the card is still opening; it takes effect once open.
     const phase = c.phase();
     if (phase !== "open" && phase !== "opening") return;
@@ -749,6 +750,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
     return AX.axis;
   };
   const onWheel = (e: WheelEvent) => {
+    if (e.target instanceof Element && e.target.closest('[data-zoom-controls]')) return;
     if (c.phase() !== "open") return;
     if (c.layout().vertical) {
       if (wheelAxis(e) === "x") onSidewaysWheel(e); // its vertical part doesn't scroll either
@@ -758,6 +760,7 @@ export function attachGestures(root: HTMLElement, c: GestureController) {
   };
 
   const onClick = (e: MouseEvent) => {
+    if (e.target instanceof Element && e.target.closest('[data-zoom-controls]')) return;
     if (performance.now() < suppressClickUntil) {
       e.preventDefault();
       e.stopPropagation();
