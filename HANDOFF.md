@@ -237,6 +237,24 @@ behind is live and a tap can reopen).
 - Unmounting the provider while not idle (route change, Astro page swap) restores
   scrolling, the background's `inert`, hidden sources, and removes flights.
 
+### From the ps2-sep21 site (upstreamed)
+
+The site vendored this library and changed it; everything generic came back here:
+closeTarget, closeButton "shared" (`.zoom-shared-close`, `closeButtonFor`), landing.fit
+"contain" and landing.clip "image" (`measureReveal`/`applyReveal`: a clip-path on each
+card, growing with progress for "image"), `data-zoom-controls` (checked in gestures'
+start, wheel and click, and onKey), `S.landing` and `S.closeButton` fixed at open,
+`prepareFlight` caching a decoded snapshot (with `decodeImages`, capped by
+`DECODE_WAIT_OPEN_MS` / `DECODE_WAIT_CLOSE_MS` via `within`), the painted handover
+(`afterPaint`) at landing and in `finishReopen`, heroes re-hidden under their own copies
+at the start of `transitionCards`, `revealSource` centring a source less than half in
+view, `dominantCard(near)` for the per-frame scan, and the scroll lock: `lockScroll`
+runs first in `open()`, `hideScrollbar` pads back any width the page gains,
+`S.coverGutter` (only where it was padded back), `placeOnPage` sizing from the html box
+(Chrome reports a locked root's clientWidth as the full viewport), and `clearPlacement`
+at closeDone. Left out: the site's `data-native-corners` markers (its squircle script
+only touches classes containing "rounded", which the library's elements never have).
+
 ### Corners and backdrop (library CSS)
 
 `zoom.css` is in three labelled parts: mechanics (required), default look (all visual,
@@ -496,6 +514,16 @@ See README for details.
 6. Option to auto-open from URL hash (`#id`) on load, if wanted.
 
 ## 9. Testing notes
+- `options.spec.ts` (Chromium and iPhone WebKit, on the icon prototype, whose settings
+  take options from its address: `?close=shared`, `?target=visible`, `?fit=contain`,
+  `?clip=image`): the shared close control, closeTarget "visible", data-zoom-controls,
+  a tap opening within the capped decode wait with 2s images, no hero under its own
+  flying copy after a turnaround, and both landing crops (in flight, cleared once open).
+- `scrollbars.spec.ts` (Chromium, scrollbars shown, a styled 15px scrollbar standing in
+  for a classic one): no landing jump, the index never moving or scrolling sideways,
+  quick close-and-reopen cycles, and a scrollbar appearing after a close adding no
+  sideways scroll. Against the code before these changes, every one of these and the
+  option tests fail.
 - iOS Safari, reported from a phone: a landed hero with both `box-shadow` and
   `overflow: hidden` showed its shadow clipped to a square box and square corners (the
   flying copy, which keeps shadow and clip on separate layers, looked right). Heroes with

@@ -148,7 +148,14 @@ React island, or keep the markup in Astro and use one small island with `scan`
 - `timeScale` — 0.2 for slow motion while tuning.
 - `geometry` — card insets, gap and `maxCardWidth`; can be a function of the viewport size.
 - `landing` — how a card sits on its source: `{ widthRatio, topOffset }`. Default is
-  exactly the source's width, top-aligned; the Book Store uses `{ 0.86, 0.1 }`.
+  exactly the source's width, top-aligned; the Book Store uses `{ 0.86, 0.1 }`. Two more:
+  - `fit: "contain"`: the visible slice of the card fits behind its source in both
+    dimensions (rather than by width alone), revealed through a crop while it flies; a
+    hero far off screen fades in at its source on close instead of flying from there.
+  - `clip: "image"`: keeps the width-fit motion, and grows the card's crop from the
+    source image's aspect ratio to the visible sheet with the same spring.
+  Landing settings are fixed for a session when it opens, so changing them mid-flight
+  can't move a running flight's destination.
 - `dismiss` — drag-to-dismiss feel: `{ distance, velocity, minDistance, pivotY, maxShrink, dimFade }`,
   plus which edges each gesture can close the card from:
   - `drag` — dragging with a finger (or the mouse): pull down from the top, or up from the bottom.
@@ -239,10 +246,17 @@ React island, or keep the markup in Astro and use one small island with `scan`
   ```tsx
   <ZoomProvider orientation="vertical" flyHome="visible" groupOpacity={0.35} ...>
   ```
-- `closeButton` — `true`, `false`, or `(close) => <YourButton/>`. Size and position it with
+- `closeButton` — `true`, `false`, `"shared"`, or `(close) => <YourButton/>`. Size and position it with
   `--zoom-close-size` (30px) and `--zoom-close-inset` (14px); to sit it concentric with the
   card's corner, make the inset the card radius minus half its size. In a stream it fades
-  out as its card scrolls away.
+  out as its card scrolls away. `"shared"`: one control for the whole overlay instead of
+  one per card, for a continuous full-screen sheet where cards aren't told apart. During
+  a flight a copy of the visible card's control rides above the flying image, anchored to
+  its window. The kind is fixed for a session when it opens: a change (a breakpoint
+  crossed by a resize) applies from the next open.
+- `closeTarget` — stream dismissal: `"requested"` (default) sends home the card whose own
+  close button was pressed; `"visible"` always sends home the card whose image is most in
+  view, as Escape, Back and gestures do.
 - `history` — off by default. `{ mode: "session" }`: opening adds one history entry,
   swiping only updates the address, Back closes (for sets people flick through,
   like the books). `{ mode: "item" }`: every item visited adds an entry and Back
@@ -258,6 +272,9 @@ React island, or keep the markup in Astro and use one small island with `scan`
   than `position: fixed`: iOS Safari clips fixed content at the viewport's edge and paints a
   solid band under its floating toolbar, while page content shows through it. Its dim,
   backdrop and stream run on past the viewport (`--zoom-overscan`) so open cards do too.
+- `data-zoom-controls` — on any element (a tuning panel, a toolbar) placed over the overlay:
+  taps, drags, wheel and keys on it never start a dismissal, swipe or wheel paging.
+  Escape still closes.
 - `revealSource` — keeps the page behind on the piece being read, so a close lands where the
   reader is (like Photos: dismiss, and the grid is at the photo you were on). The source is
   scrolled into view, centred, only when it's out of view. `"close"` (default): the moment a
@@ -332,6 +349,21 @@ then navigate and run scripts over WebDriver, and take screenshots (toolbar incl
 scripted `element.click()` is reliable.
 
 ## Notes
+
+- Images in flight: a static hero's flying copy keeps the image the page has already
+  painted (Safari can otherwise reload a cloned responsive image and leave it blank for
+  the whole short flight), and it's decoded before the original hides. A tap waits at
+  most 150ms for that and a dismissal 100ms, so input never waits on the network. At
+  landing the decoded real image shows for a frame before the copy goes.
+- Motion components are `m` inside `LazyMotion` with `domAnimation`: an app that also
+  uses `m` (not `motion.*`) ships Motion's smaller bundle (about 90KB minified against
+  138KB for the APIs used). It isn't strict, so content inside can still use `motion.*`.
+- Classic scrollbars (macOS with a mouse, Windows, Linux): the page is locked before an
+  open measures anything, the overlay's widths don't depend on whether the scrollbar is
+  showing (it hides as a card opens and returns as one closes), and a closed overlay
+  keeps no pixel size. Where a browser gives the hidden scrollbar's space to the page
+  (no `scrollbar-gutter` support), that width is padded back. Guarded by
+  `tests/e2e/scrollbars.spec.ts`.
 
 - The hero flies as a copy with its computed styles frozen, so it looks the
   same outside the card. A playing video will show as its current frame.

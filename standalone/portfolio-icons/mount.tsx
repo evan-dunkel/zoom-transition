@@ -7,6 +7,14 @@ import { TemplateDestination, ZoomProvider, type ZoomProviderProps } from "../..
 
 /** Mounts the zoom on #zoom with this portfolio's settings; props override them. */
 export function mountPortfolio(props: Partial<ZoomProviderProps> = {}) {
+  // Development: try options from the address, e.g. ?close=shared&target=visible&fit=contain.
+  const q = new URLSearchParams(location.search);
+  const landing: ZoomProviderProps["landing"] = {
+    widthRatio: 0.86,
+    topOffset: 0.05,
+    ...(q.get("fit") === "contain" ? { fit: "contain" as const, topOffset: 0 } : {}),
+    ...(q.get("clip") === "image" ? { clip: "image" as const } : {}),
+  };
   createRoot(document.getElementById("zoom")!).render(
     <ZoomProvider
       scan // pick up data-zoom-source elements; a click on the link around one opens it
@@ -19,7 +27,9 @@ export function mountPortfolio(props: Partial<ZoomProviderProps> = {}) {
       // Sections come from data-zoom-section; the title matches the page's .section-title.
       renderSectionTitle={(section) => <h2 className="section-title">{section}</h2>}
       dim={0.3} // over the blurred page (--zoom-backdrop-filter in style.css)
-      landing={{ widthRatio: 0.86, topOffset: 0.05 }}
+      landing={landing}
+      closeButton={q.get("close") === "shared" ? "shared" : true}
+      closeTarget={q.get("target") === "visible" ? "visible" : "requested"}
       flyHome="visible"
       groupOpacity={0.35}
       history={{ mode: "session" }}

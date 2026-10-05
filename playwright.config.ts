@@ -27,7 +27,7 @@ export default defineConfig({
     {
       name: "iphone-webkit",
       use: { ...devices["iPhone 15"], launchOptions: {} },
-      testMatch: ["flight-invariants.spec.ts", "paging.spec.ts", "fixed-overlay.spec.ts", "standalone-portfolio*.spec.ts"],
+      testMatch: ["flight-invariants.spec.ts", "paging.spec.ts", "fixed-overlay.spec.ts", "standalone-portfolio*.spec.ts", "options.spec.ts"],
     },
   ],
   webServer: {
