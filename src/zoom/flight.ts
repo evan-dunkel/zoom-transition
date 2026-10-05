@@ -202,6 +202,26 @@ export function createFlight(
   copy.style.top = "0";
   copy.style.width = `${W0}px`;
   copy.style.height = `${H0}px`;
+  // A hero that is one cover-fitted image (a photo cut to the hero's shape) shows a
+  // different part of that photo through a differently shaped source: a square tile
+  // shows more of a portrait photo than a wide hero does. Cropping the hero's picture
+  // can't reach the tile's, so while cropping, that image fills the window instead of
+  // the hero's box, and its own object-fit draws the tile's view at one end and the
+  // hero's at the other. (The frozen copy's styles are computed values.)
+  const fill = (() => {
+    if (opts.live) return null;
+    const images = copy.matches("img") ? [copy as HTMLImageElement] : [...copy.querySelectorAll("img")];
+    const image = images.length === 1 ? images[0] : null;
+    if (!image || image.style.objectFit !== "cover") return null;
+    const fills = image === copy
+      || (Math.abs(parseFloat(image.style.width) - W0) < 1 && Math.abs(parseFloat(image.style.height) - H0) < 1);
+    if (!fills) return null;
+    if (image !== copy) {
+      image.style.position = "absolute";
+      image.style.margin = "0";
+    }
+    return image;
+  })();
   const imageAnimations: Animation[] = [];
   if (opts.imageFade && !opts.live) {
     const images = copy.matches("img") ? [copy] : [...copy.querySelectorAll("img")];
@@ -300,6 +320,14 @@ export function createFlight(
     win.style.borderRadius = cropping ? `${r}px` : "";
     copy.style.left = `${-offX}px`;
     copy.style.top = `${-offY}px`;
+    if (fill) {
+      // The window's box, in the image's parent's units (see `fill`).
+      const own = fill === copy;
+      fill.style.left = `${own ? 0 : offX}px`;
+      fill.style.top = `${own ? 0 : offY}px`;
+      fill.style.width = `${W0 - 2 * offX}px`;
+      fill.style.height = `${H0 - 2 * offY}px`;
+    }
     if (liveHost) {
       liveHost.style.left = `${-offX}px`;
       liveHost.style.top = `${-offY}px`;

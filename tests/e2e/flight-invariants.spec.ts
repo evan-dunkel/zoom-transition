@@ -207,3 +207,38 @@ test("if a host re-lays out the page mid-close (viewport resized), the cards mov
   expect(Math.max(...steps)).toBeLessThan(40); // no 70px jump relative to the page
   expect(Math.abs(gaps[gaps.length - 1])).toBeLessThan(2); // and it lands on the tile
 });
+
+test("a cover-fitted photo flies from the tile's view of it to the hero's and back, without a jump at either end", async ({ page }) => {
+  await page.evaluate(() => {
+    const frames: { phase: string; w: number; cx: number; cy: number }[] = [];
+    (window as any).__photo = frames;
+    // How the photo is drawn in an object-fit: cover box: its on-screen width and centre.
+    (window as any).__drawn = (img: HTMLImageElement) => {
+      const r = img.getBoundingClientRect();
+      const s = Math.max(r.width / img.naturalWidth, r.height / img.naturalHeight);
+      return { w: img.naturalWidth * s, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+    };
+    const tick = () => {
+      const img = document.querySelector<HTMLImageElement>(".zoom-clone-window img");
+      const phase = document.querySelector<HTMLElement>(".zoom-root")?.dataset.phase ?? "idle";
+      if (img) frames.push({ phase, ...(window as any).__drawn(img) });
+      requestAnimationFrame(tick);
+    };
+    tick();
+  });
+  const tile = await page.evaluate(() => (window as any).__drawn(document.querySelector('[data-zoom-source="d"] img')));
+  await page.click('[data-zoom-source="d"]');
+  await expect.poll(() => phase(page)).toBe("open");
+  await page.keyboard.press("Escape");
+  await expect.poll(() => phase(page)).toBe("idle");
+  const frames: { phase: string; w: number; cx: number; cy: number }[] = await page.evaluate(() => (window as any).__photo);
+  const takeOff = frames.find((f) => f.phase === "opening")!;
+  const landing = frames.filter((f) => f.phase === "closing").at(-1)!;
+  for (const f of [takeOff, landing]) {
+    // The square tile shows the portrait photo at its full width. The flying copy draws
+    // the same, not the 16:9 hero's narrower slice blown up to fill the square.
+    expect(Math.abs(f.w - tile.w)).toBeLessThan(2);
+    expect(Math.abs(f.cx - tile.cx)).toBeLessThan(2);
+    expect(Math.abs(f.cy - tile.cy)).toBeLessThan(2);
+  }
+});

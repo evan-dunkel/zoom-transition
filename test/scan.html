@@ -9,14 +9,19 @@ body{margin:0;font-family:sans-serif;min-height:300vh} main{display:grid;grid-te
    hero; its image rounds itself), from a tile of its shape (so no crop hides the image's
    corner) with a much larger corner (40px). */
 .project [data-zoom-hero].split{overflow:visible} .project .split > .ph{border-radius:inherit}
+/* Project D: one photo, cover-fitted in both. Portrait, so the square tile shows more
+   of it than the 16:9 hero does: the flight has to draw the tile's view, not crop the hero's. */
+.tile img.photo,.project img.photo{object-fit:cover}
 .project{padding-bottom:40px} .project h2,.project p{margin:16px 24px}
 </style><link rel="stylesheet" href="../src/zoom/zoom.css"></head><body>
 <main>
  <a class="tile" href="/work/a"><div data-zoom-source="a" data-zoom-group="work"><div class="ph" style="background:linear-gradient(135deg,#f60,#309)"></div></div><h3>Project A</h3></a>
  <a class="tile" href="/work/b"><div data-zoom-source="b" data-zoom-group="work"><div class="ph" style="background:linear-gradient(135deg,#0a8,#ff0)"></div></div><h3>Project B</h3></a>
  <a class="tile" href="/work/c"><div data-zoom-source="c" data-zoom-group="work"><div class="ph" style="background:linear-gradient(135deg,#e33,#111);border-radius:40px;aspect-ratio:16/9"></div></div><h3>Project C</h3></a>
+ <a class="tile" href="/work/d"><div data-zoom-source="d" data-zoom-group="photo"><img class="photo" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='300'%3E%3Crect width='200' height='300' fill='%23246'/%3E%3Crect y='100' width='200' height='100' fill='%23fc3'/%3E%3Ccircle cx='100' cy='150' r='40' fill='%23c22'/%3E%3C/svg%3E"></div><h3>Project D</h3></a>
 </main>
 <template data-zoom-destination="a"><article class="project"><div data-zoom-hero><div class="ph hero" style="background:linear-gradient(135deg,#f60,#309)"></div></div><h2>Project A</h2><p>Case study text…</p></article></template>
 <template data-zoom-destination="b"><article class="project"><div data-zoom-hero><div class="ph hero" style="background:linear-gradient(135deg,#0a8,#ff0)"></div></div><h2>Project B</h2><p>Case study text…</p></article></template>
 <template data-zoom-destination="c"><article class="project"><div data-zoom-hero class="split"><div class="ph hero" style="background:linear-gradient(135deg,#e33,#111)"></div></div><h2>Project C</h2><p>Case study text…</p></article></template>
+<template data-zoom-destination="d"><article class="project"><div data-zoom-hero><img class="photo hero" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='300'%3E%3Crect width='200' height='300' fill='%23246'/%3E%3Crect y='100' width='200' height='100' fill='%23fc3'/%3E%3Ccircle cx='100' cy='150' r='40' fill='%23c22'/%3E%3C/svg%3E" style="display:block;width:100%"></div><h2>Project D</h2><p>Case study text…</p></article></template>
 <div id="island"></div><script src="scan.js"></script></body></html>

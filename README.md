@@ -303,6 +303,7 @@ to the motion. Guarded by `tests/e2e/flight-invariants.spec.ts`, against a plain
 rather than any prototype:
 
 - the crop between a source's shape and its hero's eases evenly with the motion;
+- a cover-fitted photo shows the tile's view of it at take-off and landing, not the hero's;
 - corner radii tween between source and hero in on-screen px, without a jump at landing;
 - the hero's shadow fades with the flight and is never cut by the crop;
 - after a tap or click nothing is left focused; keyboard users get focus moved and returned;
@@ -383,6 +384,9 @@ scripted `element.click()` is reliable.
   itself after a tap or click, so touch screens don't draw a ring); closing returns it to
   the source for keyboard users and leaves nothing focused otherwise.
 - If source and hero have different aspect ratios, the copy is cropped to the
-  source and opens out to the hero, so nothing stretches.
+  source and opens out to the hero, so nothing stretches. Where the hero is one image with
+  `object-fit: cover` (a photo cut to the hero's shape), that image fills the crop instead,
+  so it shows what the source shows at one end (a square tile shows more of a portrait
+  photo than a wide hero) and the hero's view at the other, with nothing popping at landing.
 - Every item in a group is rendered as a card while open. For very large
   groups, consider limiting the group or rendering lighter content.
